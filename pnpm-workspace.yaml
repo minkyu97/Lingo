@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - apps/*
+  - spec
+
+# Shared dependency versions. Packages reference these with "catalog:".
+catalog:
+  typescript: ^7.0.2
