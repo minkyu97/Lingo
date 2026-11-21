@@ -16,21 +16,24 @@ Lingo is an LLM-based, all-in-one translation app. It is free and open source, a
 
 Only the files a new session needs in order to find its way are listed here.
 
-| Path                                  | What it is                                                                                                                                                                                          |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `README.md`                           | Product overview: what makes Lingo different, features per surface, planned stack                                                                                                                   |
-| `AGENTS.md`                           | This file                                                                                                                                                                                           |
-| `LICENSE`                             | MIT License                                                                                                                                                                                         |
-| `.gitignore`                          | Ignore rules for OS files, secrets, Node, build output, Rust/Tauri and Xcode                                                                                                                        |
-| `mise.toml`                           | Toolchain versions (Node, pnpm). Local setup and CI both install from it                                                                                                                            |
-| `package.json`, `pnpm-workspace.yaml` | pnpm workspace root: repo-wide scripts, member packages, and the shared dependency catalog                                                                                                          |
-| `tsconfig.base.json`                  | Compiler options every TypeScript package extends                                                                                                                                                   |
-| `biome.json`                          | Lint and format rules (Biome) for TypeScript, JSON, CSS, HTML, Markdown, and YAML                                                                                                                   |
-| `.editorconfig`                       | Indentation, line endings, and charset for every file. Biome reads it                                                                                                                               |
-| `.gitattributes`                      | Checks text files out with LF line endings on every platform                                                                                                                                        |
-| `docs/architecture.md`                | The reference for decisions and structure: decisions table, repository layout, ports and adapters, key-handling rules, notes per surface, roadmap, open risks. Read it before any structural change |
-| `docs/research/context-awareness.md`  | Research: how much text around a selection each platform can provide                                                                                                                                |
-| `docs/research/platform-strategy.md`  | Research: one repo or several, framework options, and why the hybrid stack was chosen                                                                                                               |
+Documents:
+
+- `README.md`: product overview. What makes Lingo different, features per surface, planned stack.
+- `AGENTS.md`: this file.
+- `docs/architecture.md`: the reference for decisions and structure. Decisions table, repository layout, ports and adapters, key-handling rules, notes per surface, roadmap, open risks. Read it before any structural change.
+- `docs/research/context-awareness.md`: research on how much text around a selection each platform can provide.
+- `docs/research/platform-strategy.md`: research on one repo or several, framework options, and why the hybrid stack was chosen.
+- `LICENSE`: MIT License.
+
+Configuration:
+
+- `mise.toml`: toolchain versions (Node, pnpm). Local setup and CI both install from it.
+- `package.json`, `pnpm-workspace.yaml`: pnpm workspace root. Repo-wide scripts, member packages, and the shared dependency catalog.
+- `tsconfig.base.json`: compiler options every TypeScript package extends.
+- `biome.json`: lint and format rules for TypeScript, JSON, CSS, HTML, Markdown, and YAML.
+- `.editorconfig`: indentation, line endings, and charset for every file. Biome reads it.
+- `.gitattributes`: checks text files out with LF line endings on every platform.
+- `.gitignore`: ignore rules for OS files, secrets, Node, build output, Rust/Tauri, and Xcode.
 
 Planned but not yet created: `packages/` (shared TypeScript: `core`, `providers`, `ui`), `apps/` (`extension`, `desktop`, `apple`), and `spec/` (prompt templates and test fixtures). See [the planned layout](docs/architecture.md#repository-layout).
 
