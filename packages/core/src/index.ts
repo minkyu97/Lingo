@@ -23,3 +23,13 @@ export {
   promptVariant,
   renderSystemPrompt,
 } from "./prompt.ts";
+export {
+  defaultSettings,
+  languageName,
+  MAX_CONTEXT_CHARS_LIMIT,
+  normalizeSettings,
+  PROVIDER_IDS,
+  type ProviderId,
+  type Settings,
+  TARGET_LANGUAGES,
+} from "./settings.ts";
