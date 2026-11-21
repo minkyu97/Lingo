@@ -14,3 +14,11 @@ export {
   type LLMProvider,
   type StreamOptions,
 } from "./llm.ts";
+export {
+  buildLookupRequest,
+  type LookupInput,
+  type LookupMode,
+  type PromptVariant,
+  promptVariant,
+  renderSystemPrompt,
+} from "./prompt.ts";

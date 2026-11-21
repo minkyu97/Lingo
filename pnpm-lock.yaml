@@ -192,6 +192,10 @@ importers:
         version: 7.0.2
 
   packages/core:
+    dependencies:
+      '@lingo/spec':
+        specifier: workspace:*
+        version: link:../../spec
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -199,6 +203,8 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.1.1(vite@8.3.8)
+
+  spec: {}
 
 packages:
 
