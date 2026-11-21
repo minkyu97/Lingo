@@ -14,6 +14,7 @@ export {
   type LLMProvider,
   type StreamOptions,
 } from "./llm.ts";
+export { chooseMode } from "./mode.ts";
 export {
   buildLookupRequest,
   type LookupInput,
