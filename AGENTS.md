@@ -1,0 +1,116 @@
+# AGENTS.md
+
+Conventions for coding agents and human contributors working in this repository. Read this before making changes.
+
+## Project
+
+Lingo is an LLM-based, all-in-one translation app. It is free and open source, and users bring their own LLM API key. It has three surfaces:
+
+- a browser extension (Chrome, Safari on iOS)
+- a desktop app (macOS, Windows)
+- a mobile app (iOS, iPadOS; Android later)
+
+**Status: design phase.** There is no code yet. The next step is roadmap step 1 in [docs/architecture.md](docs/architecture.md#roadmap): scaffold the repository and build the browser extension MVP.
+
+## Repository map
+
+Only the files a new session needs in order to find its way are listed here.
+
+| Path | What it is |
+|---|---|
+| `README.md` | Product overview: what makes Lingo different, features per surface, planned stack |
+| `AGENTS.md` | This file |
+| `LICENSE` | MIT License |
+| `.gitignore` | Ignore rules for OS files, secrets, Node, build output, Rust/Tauri and Xcode |
+| `docs/architecture.md` | The reference for decisions and structure: decisions table, repository layout, ports and adapters, key-handling rules, notes per surface, roadmap, open risks. Read it before any structural change |
+| `docs/research/context-awareness.md` | Research: how much text around a selection each platform can provide |
+| `docs/research/platform-strategy.md` | Research: one repo or several, framework options, and why the hybrid stack was chosen |
+
+Planned but not yet created: `packages/` (shared TypeScript: `core`, `providers`, `ui`), `apps/` (`extension`, `desktop`, `apple`), and `spec/` (prompt templates and test fixtures). See [the planned layout](docs/architecture.md#repository-layout).
+
+## Keeping this file current
+
+This file is loaded into every agent session, so keep it short and keep it true.
+
+- When you add, move, rename, or remove an important file or directory, update the repository map **in the same change**.
+- "Important" means: documents, top-level directories, the root of each package or app (one line each), and configuration that affects the whole repo (workspace, CI, lint and format, toolchain versions). Do not list individual source files.
+- **Code-level structure belongs in [docs/architecture.md](docs/architecture.md)**, not here: modules, key source files, data flow, how to add an adapter. This file links to it. As code lands, replace the planned layout in that document with the actual one.
+- If a change departs from a decision recorded in `docs/architecture.md`, update that document in the same change and say so in the pull request.
+- When build and test tooling exists, add a "Commands" section here with the install, build, test, and lint commands for each surface.
+- Remove a "planned" note as soon as the thing it describes exists.
+
+## Ground rules
+
+- **Everything in the repo is written in English**: documents, code comments, commit messages, and identifiers. This holds whatever language the conversation is in.
+- In documents, mark any claim that was not confirmed from a source as `[inferred]`.
+- `packages/core` imports no platform API and no provider SDK. Platform and provider code lives in adapters.
+- API keys never appear in content scripts, logs, test fixtures, or commits.
+
+## Git workflow
+
+### Branching: GitHub Flow
+
+- `main` is the only long-lived branch. It always builds.
+- Do work on a short-lived branch created from the latest `main`, one concern per branch.
+- Name branches `<type>/<short-description>` in kebab-case, using the commit types below:
+  - `feat/extension-selection-popup`
+  - `fix/providers-refusal-handling`
+  - `docs/agents-md`
+  - with an issue number when there is one: `feat/12-selection-popup`
+- Merge through a pull request, using **squash merge**, then delete the branch. The pull request title follows the commit convention, because it becomes the commit on `main`.
+- Bring a branch up to date by rebasing it onto `main`. Only rewrite history on your own branch.
+- Do not commit directly to `main`.
+- Never force-push `main`.
+
+### Releases
+
+- Each surface is released separately with an annotated tag on `main`, using semantic versioning:
+  - `ext-v1.2.0` for the browser extension
+  - `desktop-v0.3.1` for the desktop app
+  - `ios-v1.0.0` for the iOS and iPadOS app
+- There are no release branches. Fix forward on `main` and tag a patch release. Introduce a `release/…` branch only if an older release line has to be patched after `main` has moved on.
+
+### Commit messages
+
+Keep commits short. A commit message is normally a single line in Conventional Commits form:
+
+```
+<type>(<scope>): <subject>
+```
+
+- **type**: `feat`, `fix`, `docs`, `refactor`, `test`, or `chore`. Use `chore` for build, CI, dependencies, and tooling.
+- **scope** (optional): the package or app touched: `core`, `providers`, `ui`, `extension`, `desktop`, `apple`, `spec`, or `repo` for root-level tooling. Omit it when a change spans several.
+- **subject**: imperative, lowercase, no period, 50 characters or fewer.
+
+```
+feat(extension): add selection popup
+fix(providers): handle refusal stop reason
+docs: add agent conventions
+chore(repo): add pnpm workspace
+```
+
+- Leave the body out unless the reason for the change is not clear from the subject and the diff. When one is needed, keep it to a sentence or two.
+- Mark a breaking change with `!` after the type or scope: `feat(core)!: return context level`.
+- Put issue references and longer explanations in the pull request, not the commit.
+- One logical change per commit.
+
+### Rules for agents
+
+- Commit, push, or open a pull request only when the user asks.
+- If the current branch is `main`, create a branch before committing.
+- Stage the files you changed by name. Do not use `git add -A` or `git add .`.
+- Never commit secrets, never bypass hooks with `--no-verify`, and never force-push `main`.
+
+## Testing and CI
+
+CI runs on GitHub Actions.
+
+- **Every test runs in CI on every pull request**, when it is opened and each time it is updated (the `pull_request` trigger).
+- When you add tests, whether a new suite or a new package or app that has tests, wire them into the CI workflow **in the same change**. A test that does not run in CI is not finished.
+- A pull request is ready to merge only when CI passes. Do not skip, disable, or weaken a failing test to make it pass.
+- Path filters may limit a job to the surfaces a change can affect. Tests are never skipped for any other reason.
+- CI does not exist yet, because there is nothing to test. Create `.github/workflows/ci.yml` together with the first tests in roadmap step 1, and add it to the repository map.
+
+## Agent tooling
+
+Claude Code loads `AGENTS.md` as project instructions when the project has no `CLAUDE.md`. Do not add a `CLAUDE.md`. If one ever becomes necessary, have it import this file with `@AGENTS.md` so the two cannot drift apart.

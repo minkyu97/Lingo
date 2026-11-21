@@ -1,0 +1,31 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+
+# Build output (Vite, WXT)
+dist/
+.output/
+.wxt/
+
+# Rust / Tauri
+target/
+
+# Xcode / Swift
+xcuserdata/
+DerivedData/
+.build/
+
+# Logs
+*.log
+
+# Local agent settings
+.claude/settings.local.json
+CLAUDE.local.md
