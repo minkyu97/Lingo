@@ -22,6 +22,7 @@ Only the files a new session needs in order to find its way are listed here.
 | `AGENTS.md` | This file |
 | `LICENSE` | MIT License |
 | `.gitignore` | Ignore rules for OS files, secrets, Node, build output, Rust/Tauri and Xcode |
+| `mise.toml` | Toolchain versions (Node, pnpm). Local setup and CI both install from it |
 | `docs/architecture.md` | The reference for decisions and structure: decisions table, repository layout, ports and adapters, key-handling rules, notes per surface, roadmap, open risks. Read it before any structural change |
 | `docs/research/context-awareness.md` | Research: how much text around a selection each platform can provide |
 | `docs/research/platform-strategy.md` | Research: one repo or several, framework options, and why the hybrid stack was chosen |
