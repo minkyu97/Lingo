@@ -14,6 +14,11 @@ export {
   type LLMProvider,
   type StreamOptions,
 } from "./llm.ts";
+export {
+  type LookupSettings,
+  type PreparedLookup,
+  prepareLookup,
+} from "./lookup.ts";
 export { chooseMode } from "./mode.ts";
 export {
   buildLookupRequest,
