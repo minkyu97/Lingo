@@ -14,19 +14,19 @@ An LLM-based, all-in-one translation app for the browser, the desktop, and mobil
 
 ## Surfaces
 
-| Surface | Platforms | Features |
-|---|---|---|
-| Browser extension | Chrome, Safari on iOS | Full-page translation. Translate or define selected text through a shortcut and an in-page floating component |
-| Desktop app | macOS, Windows | Translate or define text selected in any app, through a global shortcut and a dedicated floating window |
-| Mobile app | iOS, iPadOS (Android later) | Translate or define selected text, with Lingo set as the system default translation app |
+| Surface           | Platforms                   | Features                                                                                                      |
+| ----------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Browser extension | Chrome, Safari on iOS       | Full-page translation. Translate or define selected text through a shortcut and an in-page floating component |
+| Desktop app       | macOS, Windows              | Translate or define text selected in any app, through a global shortcut and a dedicated floating window       |
+| Mobile app        | iOS, iPadOS (Android later) | Translate or define selected text, with Lingo set as the system default translation app                       |
 
 ## Planned stack
 
-| Surface | Stack |
-|---|---|
-| Browser extension | WXT, React, TypeScript |
-| Desktop | Tauri 2, sharing UI and core code with the extension |
-| iOS / iPadOS | Native SwiftUI |
+| Surface           | Stack                                                |
+| ----------------- | ---------------------------------------------------- |
+| Browser extension | WXT, React, TypeScript                               |
+| Desktop           | Tauri 2, sharing UI and core code with the extension |
+| iOS / iPadOS      | Native SwiftUI                                       |
 
 All three live in this one repository. The browser extension is built first.
 

@@ -11,16 +11,16 @@ Background research:
 
 ## Decisions at a glance
 
-| Topic | Decision |
-|---|---|
-| Repository | One repo for all surfaces |
-| Browser extension | WXT + React + TypeScript; Chrome MV3 first, Safari from the same code |
-| Desktop | Tauri 2 for macOS and Windows, sharing the React UI and TypeScript core. Electron is the fallback |
-| iOS / iPadOS | Native SwiftUI app with a default-translation extension and a Safari Web Extension |
-| Shared logic | TypeScript packages for extension and desktop; a thin Swift port for iOS; shared prompts and fixtures in `spec/` |
-| LLM access | Bring your own key. The app calls provider APIs directly; there is no Lingo server |
-| macOS distribution | Developer ID + notarization, outside the Mac App Store |
-| Build order | Extension → desktop spike → desktop → iOS |
+| Topic              | Decision                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Repository         | One repo for all surfaces                                                                                        |
+| Browser extension  | WXT + React + TypeScript; Chrome MV3 first, Safari from the same code                                            |
+| Desktop            | Tauri 2 for macOS and Windows, sharing the React UI and TypeScript core. Electron is the fallback                |
+| iOS / iPadOS       | Native SwiftUI app with a default-translation extension and a Safari Web Extension                               |
+| Shared logic       | TypeScript packages for extension and desktop; a thin Swift port for iOS; shared prompts and fixtures in `spec/` |
+| LLM access         | Bring your own key. The app calls provider APIs directly; there is no Lingo server                               |
+| macOS distribution | Developer ID + notarization, outside the Mac App Store                                                           |
+| Build order        | Extension → desktop spike → desktop → iOS                                                                        |
 
 ## Repository layout
 
@@ -44,24 +44,24 @@ Releases are tagged per surface: `ext-v*`, `desktop-v*`, `ios-v*`.
 
 `packages/core` holds the domain and defines ports. It imports no platform API and no provider SDK. Each app supplies adapters.
 
-| Port | Extension | Desktop | iOS |
-|---|---|---|---|
-| `LLMProvider` (streaming) | `packages/providers` | `packages/providers` | Swift port over URLSession + SSE |
-| `ContextSource` | DOM | Accessibility / UI Automation / clipboard | Selection only; DOM in Safari |
-| `SecretStore` | Extension storage | OS keychain / Credential Manager | Shared Keychain group |
-| `SettingsStore` | Extension storage | App settings file | App Group |
+| Port                      | Extension            | Desktop                                   | iOS                              |
+| ------------------------- | -------------------- | ----------------------------------------- | -------------------------------- |
+| `LLMProvider` (streaming) | `packages/providers` | `packages/providers`                      | Swift port over URLSession + SSE |
+| `ContextSource`           | DOM                  | Accessibility / UI Automation / clipboard | Selection only; DOM in Safari    |
+| `SecretStore`             | Extension storage    | OS keychain / Credential Manager          | Shared Keychain group            |
+| `SettingsStore`           | Extension storage    | App settings file                         | App Group                        |
 
 A sketch of the central types. Names and shapes are a starting point, not a contract:
 
 ```ts
-type ContextLevel = 'none' | 'sentence' | 'paragraph' | 'document';
+type ContextLevel = "none" | "sentence" | "paragraph" | "document";
 
 interface CapturedContext {
   selection: string;
   level: ContextLevel;
-  before?: string;    // text preceding the selection, clamped to a maximum length
-  after?: string;     // text following the selection, clamped
-  title?: string;     // page or window title
+  before?: string; // text preceding the selection, clamped to a maximum length
+  after?: string; // text following the selection, clamped
+  title?: string; // page or window title
   url?: string;
   appName?: string;
 }
@@ -77,12 +77,12 @@ interface LLMProvider {
 
 ### Use cases
 
-| Use case | What it does |
-|---|---|
-| Translate selection | Translates the selection, using context when present |
-| Define in context | For a word or short phrase: the meaning in this sentence when context exists, general definitions otherwise |
-| Translate page | Translates a page in batches (extension only) |
-| Refine | Continues the conversation: the original request, the result, and the user's follow-up instructions |
+| Use case            | What it does                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Translate selection | Translates the selection, using context when present                                                        |
+| Define in context   | For a word or short phrase: the meaning in this sentence when context exists, general definitions otherwise |
+| Translate page      | Translates a page in batches (extension only)                                                               |
+| Refine              | Continues the conversation: the original request, the result, and the user's follow-up instructions         |
 
 Chat-based refinement needs no separate mechanism. A translation is the first turn of a conversation, and refining appends turns to it.
 
@@ -107,11 +107,11 @@ Lingo is free and open source with no subscription, so users supply their own pr
 
 ### Where keys live and where calls are made
 
-| Surface | Key storage | API calls made from |
-|---|---|---|
-| Extension | Extension storage | The background service worker only |
-| Desktop | OS keychain / Credential Manager | To be decided in the spike (see below) |
-| iOS | Keychain, shared across the app and its extensions `[inferred]` | Each native process; the Safari extension's background script |
+| Surface   | Key storage                                                     | API calls made from                                           |
+| --------- | --------------------------------------------------------------- | ------------------------------------------------------------- |
+| Extension | Extension storage                                               | The background service worker only                            |
+| Desktop   | OS keychain / Credential Manager                                | To be decided in the spike (see below)                        |
+| iOS       | Keychain, shared across the app and its extensions `[inferred]` | Each native process; the Safari extension's background script |
 
 Extension rules:
 
@@ -125,10 +125,10 @@ Desktop open decision: either the webview calls providers through the shared Typ
 
 Three adapters cover the plan:
 
-| Adapter | Covers |
-|---|---|
-| Anthropic | Claude models |
-| OpenAI | OpenAI models |
+| Adapter                                  | Covers                                                                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Anthropic                                | Claude models                                                                                                                 |
+| OpenAI                                   | OpenAI models                                                                                                                 |
 | OpenAI-compatible with a custom base URL | Local LLMs later (Ollama, LM Studio and similar). Not part of the MVP; the adapter slot exists so adding it is not a redesign |
 
 Both hosted APIs permit cross-origin calls from an extension (checked with live preflight requests on 2026-11-21). In Chrome, calls from the service worker to origins in `host_permissions` skip CORS entirely ([Chrome](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests)).
@@ -194,12 +194,12 @@ Feature: translate or define selected text anywhere, with Lingo set as the syste
 
 Targets in `apps/apple`:
 
-| Target | Role |
-|---|---|
-| App (SwiftUI) | Settings, API keys, chat and history |
-| Translation provider extension | Makes Lingo selectable as the default translation app |
-| Safari Web Extension | Wraps the browser extension build |
-| Swift core package | The Swift port of prompts and provider adapters, shared by the targets above |
+| Target                         | Role                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| App (SwiftUI)                  | Settings, API keys, chat and history                                         |
+| Translation provider extension | Makes Lingo selectable as the default translation app                        |
+| Safari Web Extension           | Wraps the browser extension build                                            |
+| Swift core package             | The Swift port of prompts and provider adapters, shared by the targets above |
 
 The default translation app API (TranslationUIProvider):
 
@@ -241,11 +241,11 @@ Deferred. `ACTION_PROCESS_TEXT` provides the selected text only, so the feature 
 
 ## Open risks
 
-| Risk | Plan |
-|---|---|
-| Tauri cannot deliver a focus-preserving panel on Windows | The desktop spike; Electron fallback |
-| The macOS panel depends on a single-maintainer plugin | Same spike; the plugin is small enough to fork or replace |
-| Accessibility coverage is lower than estimated in key apps | Measure during the spike; selection-only fallback always works |
-| Safari kills the background script mid-request | Short requests, resumable page translation |
-| App Store rejects a bring-your-own-key app | Build the iOS app last; keep the extension and desktop independent of it |
-| Default-translation extension limits are undocumented | Prototype early in step 4 |
+| Risk                                                       | Plan                                                                     |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Tauri cannot deliver a focus-preserving panel on Windows   | The desktop spike; Electron fallback                                     |
+| The macOS panel depends on a single-maintainer plugin      | Same spike; the plugin is small enough to fork or replace                |
+| Accessibility coverage is lower than estimated in key apps | Measure during the spike; selection-only fallback always works           |
+| Safari kills the background script mid-request             | Short requests, resumable page translation                               |
+| App Store rejects a bring-your-own-key app                 | Build the iOS app last; keep the extension and desktop independent of it |
+| Default-translation extension limits are undocumented      | Prototype early in step 4                                                |

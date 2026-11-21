@@ -22,11 +22,11 @@ Two constraints shaped these:
 
 ## What each surface needs
 
-| Surface | Needs |
-|---|---|
-| Browser extension (Chrome MV3, Safari on iOS) | Full-page translation; translate or define the selection through a hotkey and an in-page floating component |
-| Desktop (macOS, Windows) | Global hotkey; read the selection and surrounding text from any app; a floating window that does not steal focus from the source app; menu-bar or tray presence; settings; streaming chat; secure key storage |
-| Mobile (iOS, iPadOS) | A main app for settings, keys and chat; an extension that registers Lingo as the system default translation app; a Safari Web Extension |
+| Surface                                       | Needs                                                                                                                                                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Browser extension (Chrome MV3, Safari on iOS) | Full-page translation; translate or define the selection through a hotkey and an in-page floating component                                                                                                   |
+| Desktop (macOS, Windows)                      | Global hotkey; read the selection and surrounding text from any app; a floating window that does not steal focus from the source app; menu-bar or tray presence; settings; streaming chat; secure key storage |
+| Mobile (iOS, iPadOS)                          | A main app for settings, keys and chat; an extension that registers Lingo as the system default translation app; a Safari Web Extension                                                                       |
 
 ## Repository: one repo
 
@@ -51,15 +51,15 @@ The layout is in [architecture.md](../architecture.md).
 
 ## Framework options
 
-| Option | Desktop system integration | iOS extension fit | Code shared with the browser extension | Solo-developer effort |
-|---|---|---|---|---|
-| (a) Tauri 2 for desktop and mobile | Good on macOS, fair on Windows | Poor: extensions are Swift regardless | High | Medium, plus a hidden Swift cost |
-| (b) Electron, desktop only | Good | — | High | Low to medium; large binary |
-| (c) Flutter | Poor to fair | Poor | None | High |
-| (d) React Native with desktop forks | Fair | Poor | Logic only | High |
-| (e) Kotlin Multiplatform / Compose | Poor to fair (JVM) | Fair, logic only | Low | High |
-| (f) Native per platform + Rust core | Excellent | Excellent | Core only, via WASM | Highest |
-| **(g) Hybrid — chosen** | Good | Excellent | High: core and UI | Medium |
+| Option                              | Desktop system integration     | iOS extension fit                     | Code shared with the browser extension | Solo-developer effort            |
+| ----------------------------------- | ------------------------------ | ------------------------------------- | -------------------------------------- | -------------------------------- |
+| (a) Tauri 2 for desktop and mobile  | Good on macOS, fair on Windows | Poor: extensions are Swift regardless | High                                   | Medium, plus a hidden Swift cost |
+| (b) Electron, desktop only          | Good                           | —                                     | High                                   | Low to medium; large binary      |
+| (c) Flutter                         | Poor to fair                   | Poor                                  | None                                   | High                             |
+| (d) React Native with desktop forks | Fair                           | Poor                                  | Logic only                             | High                             |
+| (e) Kotlin Multiplatform / Compose  | Poor to fair (JVM)             | Fair, logic only                      | Low                                    | High                             |
+| (f) Native per platform + Rust core | Excellent                      | Excellent                             | Core only, via WASM                    | Highest                          |
+| **(g) Hybrid — chosen**             | Good                           | Excellent                             | High: core and UI                      | Medium                           |
 
 ### (a) Tauri 2 everywhere
 
@@ -101,12 +101,12 @@ The layout is in [architecture.md](../architecture.md).
 
 ### (g) Hybrid — chosen
 
-| Surface | Stack | Why |
-|---|---|---|
-| Browser extension | WXT + React + TypeScript | See "Extension framework" below |
+| Surface                   | Stack                                                                | Why                                                                                                |
+| ------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Browser extension         | WXT + React + TypeScript                                             | See "Extension framework" below                                                                    |
 | Desktop (macOS + Windows) | Tauri 2, sharing the React UI and TypeScript core with the extension | Simultaneous support needs one desktop codebase. A lighter runtime suits an always-running utility |
-| iOS / iPadOS | Native SwiftUI | The value is in the extensions, and those are Swift under any framework |
-| Android | Deferred; native Kotlin when it happens | — |
+| iOS / iPadOS              | Native SwiftUI                                                       | The value is in the extensions, and those are Swift under any framework                            |
+| Android                   | Deferred; native Kotlin when it happens                              | —                                                                                                  |
 
 ## Why not a shared FFI core
 
@@ -141,25 +141,25 @@ The desktop flow of "translate the selection without stealing focus" rests on sm
 
 ## Extension framework
 
-| Framework | Status (GitHub, 2026-11) | Safari |
-|---|---|---|
-| WXT | Active: v0.21.5 on 2026-10-26 | Has a `safari` build target; packaging is a manual step with Apple's tool ([guide](https://github.com/wxt-dev/wxt/blob/main/docs/guide/essentials/publishing.md)) |
-| Plasmo | Last release 2025-05-17; effectively unmaintained | — |
-| CRXJS | vite-plugin v2.7.0 in June 2026, still receiving commits | Not confirmed |
+| Framework | Status (GitHub, 2026-11)                                 | Safari                                                                                                                                                            |
+| --------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WXT       | Active: v0.21.5 on 2026-10-26                            | Has a `safari` build target; packaging is a manual step with Apple's tool ([guide](https://github.com/wxt-dev/wxt/blob/main/docs/guide/essentials/publishing.md)) |
+| Plasmo    | Last release 2025-05-17; effectively unmaintained        | —                                                                                                                                                                 |
+| CRXJS     | vite-plugin v2.7.0 in June 2026, still receiving commits | Not confirmed                                                                                                                                                     |
 
 **Decision: WXT.** It is the most actively maintained and documents a Safari flow. read-frog, an open-source translation extension, uses it.
 
 ## Precedents
 
-| Product | Structure |
-|---|---|
-| openai-translator | One TypeScript repo building Chromium, Firefox, Tauri desktop and userscript targets, with a Safari folder ([tree](https://github.com/openai-translator/openai-translator/tree/main/src)). The closest precedent to Lingo's plan |
-| Pot | Tauri desktop only. Archived 2026-09-07 ([repo](https://github.com/pot-app/pot-desktop)) |
-| Easydict | Native Swift, macOS only ([repo](https://github.com/tisfeng/Easydict)) |
-| Bitwarden | Moved mobile from Xamarin/.NET MAUI to native Swift and Kotlin for performance and deeper native integration ([article](https://www.helpnetsecurity.com/2025/01/17/bitwarden-native-mobile-applications/)). Shares a Rust SDK through UniFFI and WASM |
-| 1Password 8 | Rust core, Electron on desktop including macOS, SwiftUI on iOS ([blog](https://1password.com/blog/1password-8-the-story-so-far)) |
-| Signal | Rust `libsignal` exposed to Java, Swift and TypeScript; separate repos per client ([repo](https://github.com/signalapp/libsignal)) |
-| Raycast 2.0 | Native shells (Swift/AppKit, C#/WPF) hosting one shared React UI. They rejected Electron and Tauri for lack of native control ([blog](https://www.raycast.com/blog/a-technical-deep-dive-into-the-new-raycast.md)) |
+| Product           | Structure                                                                                                                                                                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| openai-translator | One TypeScript repo building Chromium, Firefox, Tauri desktop and userscript targets, with a Safari folder ([tree](https://github.com/openai-translator/openai-translator/tree/main/src)). The closest precedent to Lingo's plan                      |
+| Pot               | Tauri desktop only. Archived 2026-09-07 ([repo](https://github.com/pot-app/pot-desktop))                                                                                                                                                              |
+| Easydict          | Native Swift, macOS only ([repo](https://github.com/tisfeng/Easydict))                                                                                                                                                                                |
+| Bitwarden         | Moved mobile from Xamarin/.NET MAUI to native Swift and Kotlin for performance and deeper native integration ([article](https://www.helpnetsecurity.com/2025/01/17/bitwarden-native-mobile-applications/)). Shares a Rust SDK through UniFFI and WASM |
+| 1Password 8       | Rust core, Electron on desktop including macOS, SwiftUI on iOS ([blog](https://1password.com/blog/1password-8-the-story-so-far))                                                                                                                      |
+| Signal            | Rust `libsignal` exposed to Java, Swift and TypeScript; separate repos per client ([repo](https://github.com/signalapp/libsignal))                                                                                                                    |
+| Raycast 2.0       | Native shells (Swift/AppKit, C#/WPF) hosting one shared React UI. They rejected Electron and Tauri for lack of native control ([blog](https://www.raycast.com/blog/a-technical-deep-dive-into-the-new-raycast.md))                                    |
 
 A pattern across these: products with deep OS extensions on mobile end up native there, whatever they use on desktop.
 
