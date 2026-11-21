@@ -25,6 +25,9 @@ Only the files a new session needs in order to find its way are listed here.
 | `mise.toml`                           | Toolchain versions (Node, pnpm). Local setup and CI both install from it                                                                                                                            |
 | `package.json`, `pnpm-workspace.yaml` | pnpm workspace root: repo-wide scripts, member packages, and the shared dependency catalog                                                                                                          |
 | `tsconfig.base.json`                  | Compiler options every TypeScript package extends                                                                                                                                                   |
+| `biome.json`                          | Lint and format rules (Biome) for TypeScript, JSON, CSS, HTML, Markdown, and YAML                                                                                                                   |
+| `.editorconfig`                       | Indentation, line endings, and charset for every file. Biome reads it                                                                                                                               |
+| `.gitattributes`                      | Checks text files out with LF line endings on every platform                                                                                                                                        |
 | `docs/architecture.md`                | The reference for decisions and structure: decisions table, repository layout, ports and adapters, key-handling rules, notes per surface, roadmap, open risks. Read it before any structural change |
 | `docs/research/context-awareness.md`  | Research: how much text around a selection each platform can provide                                                                                                                                |
 | `docs/research/platform-strategy.md`  | Research: one repo or several, framework options, and why the hybrid stack was chosen                                                                                                               |
@@ -39,8 +42,27 @@ This file is loaded into every agent session, so keep it short and keep it true.
 - "Important" means: documents, top-level directories, the root of each package or app (one line each), and configuration that affects the whole repo (workspace, CI, lint and format, toolchain versions). Do not list individual source files.
 - **Code-level structure belongs in [docs/architecture.md](docs/architecture.md)**, not here: modules, key source files, data flow, how to add an adapter. This file links to it. As code lands, replace the planned layout in that document with the actual one.
 - If a change departs from a decision recorded in `docs/architecture.md`, update that document in the same change and say so in the pull request.
-- When build and test tooling exists, add a "Commands" section here with the install, build, test, and lint commands for each surface.
+- Keep the Commands section in step with the scripts in the root `package.json`.
 - Remove a "planned" note as soon as the thing it describes exists.
+
+## Commands
+
+Run `mise install` once to get the pinned Node and pnpm, then `pnpm install`. If your shell does not activate mise, prefix commands with `mise x --`.
+
+| Command       | What it does                                                                       |
+| ------------- | ---------------------------------------------------------------------------------- |
+| `pnpm lint`   | Checks formatting, lint rules, and import order without changing files. CI runs it |
+| `pnpm format` | Applies formatting and safe lint fixes                                             |
+
+## Code style
+
+Formatting and linting are automated. Run the tools instead of formatting by hand.
+
+- **Biome** formats and lints TypeScript, JavaScript, JSON, CSS, HTML, Markdown, and YAML with its recommended rule set. Its configuration is `biome.json`.
+- **`.editorconfig`** holds the formatting baseline: 2-space indent, LF line endings, UTF-8, final newline. Biome reads it, so change those values there and not in `biome.json`.
+- Run `pnpm format` before committing. `pnpm lint` must pass, and CI enforces it.
+- Fix a lint finding in the code. Suppress one only with a `biome-ignore` comment that gives the reason. Do not turn a rule off for the whole repo to get a change through.
+- **A new language brings its formatter and linter with it.** The change that adds the first Rust or Swift file also adds that language's standard tools with their default rules (`rustfmt` and Clippy for Rust, `swift-format` for Swift), their config files, a CI check, and a line in this section.
 
 ## Ground rules
 
