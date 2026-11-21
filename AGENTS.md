@@ -38,9 +38,10 @@ Configuration:
 
 Code:
 
-- `packages/core`: `@lingo/core`. Domain types, ports, and use cases in plain TypeScript with no dependencies.
+- `packages/core`: `@lingo/core`. Domain types, ports, and use cases in plain TypeScript, with no platform or provider dependencies.
+- `spec/`: `@lingo/spec`. Prompt templates and test vectors as data, shared by every implementation of the core.
 
-Planned but not yet created: `packages/providers`, `packages/ui`, `apps/` (`extension`, `desktop`, `apple`), and `spec/` (prompt templates and test fixtures). See [the planned layout](docs/architecture.md#repository-layout).
+Planned but not yet created: `packages/providers`, `packages/ui`, and `apps/` (`extension`, `desktop`, `apple`). See [the planned layout](docs/architecture.md#repository-layout).
 
 ## Keeping this file current
 
