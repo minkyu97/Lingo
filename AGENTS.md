@@ -10,7 +10,7 @@ Lingo is an LLM-based, all-in-one translation app. It is free and open source, a
 - a desktop app (macOS, Windows)
 - a mobile app (iOS, iPadOS; Android later)
 
-**Status: design phase.** There is no code yet. The next step is roadmap step 1 in [docs/architecture.md](docs/architecture.md#roadmap): scaffold the repository and build the browser extension MVP.
+**Status: early development.** Roadmap step 1 in [docs/architecture.md](docs/architecture.md#roadmap) is in progress: the shared packages and the first slice of the browser extension.
 
 ## Repository map
 
@@ -35,7 +35,11 @@ Configuration:
 - `.gitattributes`: checks text files out with LF line endings on every platform.
 - `.gitignore`: ignore rules for OS files, secrets, Node, build output, Rust/Tauri, and Xcode.
 
-Planned but not yet created: `packages/` (shared TypeScript: `core`, `providers`, `ui`), `apps/` (`extension`, `desktop`, `apple`), and `spec/` (prompt templates and test fixtures). See [the planned layout](docs/architecture.md#repository-layout).
+Code:
+
+- `packages/core`: `@lingo/core`. Domain types, ports, and use cases in plain TypeScript with no dependencies.
+
+Planned but not yet created: `packages/providers`, `packages/ui`, `apps/` (`extension`, `desktop`, `apple`), and `spec/` (prompt templates and test fixtures). See [the planned layout](docs/architecture.md#repository-layout).
 
 ## Keeping this file current
 
@@ -52,10 +56,12 @@ This file is loaded into every agent session, so keep it short and keep it true.
 
 Run `mise install` once to get the pinned Node and pnpm, then `pnpm install`. If your shell does not activate mise, prefix commands with `mise x --`.
 
-| Command       | What it does                                                                       |
-| ------------- | ---------------------------------------------------------------------------------- |
-| `pnpm lint`   | Checks formatting, lint rules, and import order without changing files. CI runs it |
-| `pnpm format` | Applies formatting and safe lint fixes                                             |
+| Command          | What it does                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| `pnpm lint`      | Checks formatting, lint rules, and import order without changing files. CI runs it |
+| `pnpm format`    | Applies formatting and safe lint fixes                                             |
+| `pnpm typecheck` | Type-checks every package                                                          |
+| `pnpm test`      | Runs the unit tests of every package                                               |
 
 ## Code style
 

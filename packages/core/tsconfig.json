@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No DOM: core must run anywhere, so page and browser APIs do not type-check here.
+    "lib": ["ESNext", "WebWorker"],
+    "types": []
+  },
+  "include": ["src"]
+}
