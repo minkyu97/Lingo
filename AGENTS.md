@@ -33,6 +33,7 @@ Configuration:
 - `biome.json`: lint and format rules for TypeScript, JSON, CSS, HTML, Markdown, and YAML.
 - `.editorconfig`: indentation, line endings, and charset for every file. Biome reads it.
 - `.gitattributes`: checks text files out with LF line endings on every platform.
+- `.github/workflows/ci.yml`: CI. Runs lint, typecheck, and tests on every pull request.
 - `.gitignore`: ignore rules for OS files, secrets, Node, build output, Rust/Tauri, and Xcode.
 
 Code:
@@ -143,7 +144,7 @@ CI runs on GitHub Actions.
 - When you add tests, whether a new suite or a new package or app that has tests, wire them into the CI workflow **in the same change**. A test that does not run in CI is not finished.
 - A pull request is ready to merge only when CI passes. Do not skip, disable, or weaken a failing test to make it pass.
 - Path filters may limit a job to the surfaces a change can affect. Tests are never skipped for any other reason.
-- CI does not exist yet, because there is nothing to test. Create `.github/workflows/ci.yml` together with the first tests in roadmap step 1, and add it to the repository map.
+- The workflow is `.github/workflows/ci.yml`. It installs the toolchain from `mise.toml`, so local and CI versions match.
 
 ## Agent tooling
 
