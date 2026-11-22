@@ -5,6 +5,7 @@ import {
   type LLMProvider,
   type StreamOptions,
 } from "@lingo/core";
+import { ANTHROPIC_DEFAULT_MODEL, ANTHROPIC_MODELS } from "./catalog.ts";
 
 export interface AnthropicProviderOptions {
   apiKey: string;
@@ -14,39 +15,6 @@ export interface AnthropicProviderOptions {
   maxRetries?: number;
   fetch?: typeof fetch;
 }
-
-interface ModelTraits {
-  label: string;
-  /** Accepts `output_config.effort`. */
-  effort: boolean;
-  /** Has server-side fallback for requests the model declines. */
-  fallbacks: boolean;
-}
-
-/**
- * Models offered in settings. Request parameters that some models reject are
- * sent only to models listed here; a model ID typed in by hand gets a plain
- * request.
- */
-export const ANTHROPIC_MODELS: Readonly<Record<string, ModelTraits>> = {
-  "claude-opus-5-5": {
-    label: "Claude Opus 5.5",
-    effort: true,
-    fallbacks: true,
-  },
-  "claude-sonnet-5-5": {
-    label: "Claude Sonnet 5.5",
-    effort: true,
-    fallbacks: true,
-  },
-  "claude-haiku-5-5": {
-    label: "Claude Haiku 5.5",
-    effort: true,
-    fallbacks: false,
-  },
-};
-
-export const ANTHROPIC_DEFAULT_MODEL = "claude-opus-5-5";
 
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 

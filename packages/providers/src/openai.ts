@@ -5,6 +5,7 @@ import {
   type StreamOptions,
 } from "@lingo/core";
 import OpenAI from "openai";
+import { OPENAI_DEFAULT_MODEL } from "./catalog.ts";
 
 export interface OpenAIProviderOptions {
   apiKey: string;
@@ -14,15 +15,6 @@ export interface OpenAIProviderOptions {
   maxRetries?: number;
   fetch?: typeof fetch;
 }
-
-/** Models offered in settings. Any other model ID can be typed in by hand. */
-export const OPENAI_MODELS: Readonly<Record<string, { label: string }>> = {
-  "gpt-6.2-sol": { label: "GPT-6.2 Sol" },
-  "gpt-6.2-astra": { label: "GPT-6.2 Astra" },
-  "gpt-6-luna": { label: "GPT-6 Luna" },
-};
-
-export const OPENAI_DEFAULT_MODEL = "gpt-6.2-sol";
 
 export function createOpenAIProvider(
   options: OpenAIProviderOptions,
