@@ -2,7 +2,7 @@
 
 An LLM-based, all-in-one translation app for the browser, the desktop, and mobile.
 
-**Status: design phase.** There is no code yet. This repository currently holds the research and architecture decisions the implementation will follow.
+**Status: early development.** The browser extension can translate or define selected text on any page. Chat refinement, full-page translation, the desktop app, and the mobile app are not built yet.
 
 ## What makes it different
 
@@ -20,7 +20,7 @@ An LLM-based, all-in-one translation app for the browser, the desktop, and mobil
 | Desktop app       | macOS, Windows              | Translate or define text selected in any app, through a global shortcut and a dedicated floating window       |
 | Mobile app        | iOS, iPadOS (Android later) | Translate or define selected text, with Lingo set as the system default translation app                       |
 
-## Planned stack
+## Stack
 
 | Surface           | Stack                                                |
 | ----------------- | ---------------------------------------------------- |
@@ -28,7 +28,19 @@ An LLM-based, all-in-one translation app for the browser, the desktop, and mobil
 | Desktop           | Tauri 2, sharing UI and core code with the extension |
 | iOS / iPadOS      | Native SwiftUI                                       |
 
-All three live in this one repository. The browser extension is built first.
+All three live in this one repository. The browser extension is built first; the desktop and mobile apps are planned.
+
+## Try the extension
+
+You need [mise](https://mise.jdx.dev) and Chrome 140 or later.
+
+1. Install the toolchain and the dependencies: `mise install`, then `pnpm install`.
+2. Build the extension: `pnpm build`.
+3. Open `chrome://extensions`, turn on developer mode, choose "Load unpacked", and select `apps/extension/.output/chrome-mv3`.
+4. The settings page opens. Enter an Anthropic or OpenAI API key and save. The key stays in your browser.
+5. Select text on any page and press the Lingo button that appears next to it, or press Alt+Shift+L.
+
+For the development commands and conventions, see [AGENTS.md](AGENTS.md).
 
 ## Documents
 
