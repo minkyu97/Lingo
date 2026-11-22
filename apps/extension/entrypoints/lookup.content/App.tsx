@@ -1,6 +1,12 @@
 import { type CapturedContext, chooseMode, type LookupMode } from "@lingo/core";
 import { LookupCard } from "@lingo/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { browser } from "wxt/browser";
 import { captureContext } from "../../src/context/dom.ts";
 import { openLookup } from "../../src/lookup-client.ts";
@@ -147,8 +153,14 @@ export function LookupApp({ host }: { host: Element }) {
   if (panel) {
     const { lookup, position } = panel;
     const placed = placePanel(position, viewport());
+    const style = {
+      left: placed.left,
+      top: placed.top,
+      bottom: placed.bottom,
+      "--lingo-card-max-height": `${placed.maxHeight}px`,
+    } as CSSProperties;
     return (
-      <div className="lingo-panel" style={{ left: placed.x, top: placed.y }}>
+      <div className="lingo-panel" style={style}>
         <LookupCard
           mode={lookup.mode}
           status={lookup.status}

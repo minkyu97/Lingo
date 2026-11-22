@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  PANEL_SIZE,
+  PANEL_MAX_HEIGHT,
+  PANEL_MIN_HEIGHT,
+  PANEL_WIDTH,
   placePanel,
   placeTrigger,
   TRIGGER_SIZE,
@@ -28,26 +30,54 @@ describe("placeTrigger", () => {
 });
 
 describe("placePanel", () => {
-  it("opens below the anchor when there is room", () => {
+  it("hangs below the anchor at full height when there is room", () => {
     expect(placePanel({ x: 300, y: 200 }, viewport)).toEqual({
-      x: 300,
-      y: 200,
+      left: 300,
+      top: 200,
+      maxHeight: PANEL_MAX_HEIGHT,
     });
   });
 
-  it("opens above the anchor near the bottom of the viewport", () => {
+  it("stands above the anchor near the bottom of the viewport", () => {
     const placed = placePanel({ x: 300, y: 700 }, viewport);
-    expect(placed.y + PANEL_SIZE.height).toBeLessThan(700);
+    expect(placed.top).toBeUndefined();
+    // The bottom edge of the panel ends up above the anchor.
+    const bottomEdge = viewport.height - (placed.bottom ?? 0);
+    expect(bottomEdge).toBeLessThan(700);
+    expect(placed.maxHeight).toBe(PANEL_MAX_HEIGHT);
+  });
+
+  it("limits its height to the room on the side it opens to", () => {
+    // 380px below and less above: opens down, but shorter than the maximum.
+    const down = placePanel({ x: 300, y: 412 }, viewport);
+    expect(down.top).toBe(412);
+    expect(down.maxHeight).toBe(380);
+
+    // 300px above, 90px below: opens up into the 300px.
+    const up = placePanel({ x: 300, y: 344 }, { width: 1200, height: 442 });
+    expect(up.bottom).toBeDefined();
+    expect(up.maxHeight).toBe(300);
+  });
+
+  it("never reaches past the viewport when it opens down", () => {
+    for (const y of [0, 100, 300, 359]) {
+      const placed = placePanel({ x: 300, y }, viewport);
+      expect((placed.top ?? 0) + placed.maxHeight).toBeLessThanOrEqual(
+        viewport.height,
+      );
+    }
   });
 
   it("stays inside the viewport horizontally", () => {
     const placed = placePanel({ x: 1150, y: 200 }, viewport);
-    expect(placed.x + PANEL_SIZE.width).toBeLessThanOrEqual(viewport.width);
+    expect(placed.left + PANEL_WIDTH).toBeLessThanOrEqual(viewport.width);
+    expect(placePanel({ x: -40, y: 200 }, viewport).left).toBeGreaterThan(0);
   });
 
-  it("stays on screen in a viewport smaller than the panel", () => {
-    const placed = placePanel({ x: 10, y: 10 }, { width: 300, height: 200 });
-    expect(placed.x).toBeGreaterThanOrEqual(0);
-    expect(placed.y).toBeGreaterThanOrEqual(0);
+  it("keeps a usable height in a very small viewport", () => {
+    const placed = placePanel({ x: 10, y: 60 }, { width: 300, height: 180 });
+    expect(placed.maxHeight).toBe(PANEL_MIN_HEIGHT);
+    expect(placed.left).toBeGreaterThanOrEqual(0);
+    expect(placed.top).toBeGreaterThanOrEqual(0);
   });
 });
