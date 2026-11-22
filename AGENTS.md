@@ -140,6 +140,7 @@ chore(repo): add pnpm workspace
 ### Rules for agents
 
 - Commit, push, or open a pull request only when the user asks.
+- Do not add `Co-Authored-By` or any other attribution trailer to a commit message.
 - If the current branch is `main`, create a branch before committing.
 - Stage the files you changed by name. Do not use `git add -A` or `git add .`.
 - Never commit secrets, never bypass hooks with `--no-verify`, and never force-push `main`.
