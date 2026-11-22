@@ -65,6 +65,10 @@ interface RecordedRequest {
     fallbacks?: string;
     messages?: { role: string; content: string }[];
     input?: { role: string; content: string }[];
+    /** Anthropic's place for a JSON schema. */
+    output_config?: { format?: { type: string } };
+    /** OpenAI's place for a JSON schema. */
+    text?: { format?: { type: string; name: string } };
   };
 }
 
@@ -124,6 +128,12 @@ async function openPageAndSelect(context: BrowserContext, word: string) {
 const panel = (page: Page) =>
   page.getByRole("region", { name: "Lingo lookup" });
 
+/** Waits until the panel shows a finished dictionary entry. */
+async function expectFinishedEntry(page: Page) {
+  await expect(panel(page).getByText("In this context")).toBeVisible();
+  await expect(panel(page).getByRole("button", { name: "Copy" })).toBeVisible();
+}
+
 test("defines a selected word using its paragraph", async ({
   context,
   extensionId,
@@ -135,11 +145,28 @@ test("defines a selected word using its paragraph", async ({
 
   await trigger(page).click();
 
-  await expect(panel(page)).toContainText("안녕하세요");
   await expect(
     panel(page).getByRole("button", { name: "Define" }),
   ).toHaveAttribute("aria-pressed", "true");
-  await expect(panel(page).getByRole("button", { name: "Copy" })).toBeVisible();
+  await expectFinishedEntry(page);
+
+  // The answer is laid out as a dictionary entry, not printed as JSON.
+  const entry = panel(page).locator(".lingo-entry");
+  await expect(entry.locator(".lingo-entry__headword")).toHaveText("bank");
+  await expect(entry).toContainText("/bæŋk/");
+  await expect(entry).toContainText("강가의 땅을 가리킨다");
+  await expect(entry.getByRole("heading", { level: 3 })).toHaveText([
+    "명사",
+    "동사",
+  ]);
+  await expect(entry.getByText("in context", { exact: true })).toHaveCount(1);
+  await expect(
+    entry.getByRole("listitem").filter({ hasText: "in context" }),
+  ).toContainText("강둑, 제방");
+  await expect(entry).toContainText('open a "savings" bank account');
+  await expect(entry).toContainText("은행 계좌를 만들다");
+  await expect(panel(page)).not.toContainText('"headword"');
+  await page.screenshot({ path: testInfo.outputPath("entry.png") });
 
   // The panel tells the user what was sent along with the selection.
   await panel(page).getByRole("button", { name: "Paragraph context" }).click();
@@ -151,6 +178,7 @@ test("defines a selected word using its paragraph", async ({
   expect(sent?.body.model).toBe("claude-opus-5-5");
   expect(sent?.body.fallbacks).toBe("default");
   expect(sent?.body.system).toContain("dictionary");
+  expect(sent?.body.output_config?.format?.type).toBe("json_schema");
   expect(sent?.body.messages?.[0]?.content).toContain(
     "<passage>She sat on the river [[bank]] and watched the boats.</passage>",
   );
@@ -168,17 +196,21 @@ test("switching the mode runs the lookup again", async ({
   });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
-  await expect(panel(page)).toContainText("안녕하세요");
+  await expectFinishedEntry(page);
 
   await panel(page).getByRole("button", { name: "Translate" }).click();
 
   await expect(
     panel(page).getByRole("button", { name: "Translate" }),
   ).toHaveAttribute("aria-pressed", "true");
+  // A translation is plain text, with no dictionary layout.
+  await expect(panel(page)).toContainText("안녕하세요");
+  await expect(panel(page).locator(".lingo-entry")).toHaveCount(0);
   await expect(panel(page).getByRole("button", { name: "Copy" })).toBeVisible();
   const requests = await recordedRequests(page);
   expect(requests).toHaveLength(2);
   expect(requests[1]?.body.system).toContain("translator");
+  expect(requests[1]?.body.output_config?.format).toBeUndefined();
 });
 
 test("sends only the selection when context awareness is off", async ({
@@ -192,7 +224,7 @@ test("sends only the selection when context awareness is off", async ({
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
 
-  await expect(panel(page)).toContainText("안녕하세요");
+  await expectFinishedEntry(page);
   await expect(panel(page)).toContainText("Selection only");
   const [sent] = await recordedRequests(page);
   expect(sent?.body.messages?.[0]?.content).toBe("<selection>bank</selection>");
@@ -214,11 +246,18 @@ test("uses OpenAI when it is the chosen provider", async ({
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
 
-  await expect(panel(page)).toContainText("안녕하세요");
+  await expectFinishedEntry(page);
+  await expect(panel(page).locator(".lingo-entry__headword")).toHaveText(
+    "bank",
+  );
   const [sent] = await recordedRequests(page);
   expect(sent?.path).toBe("/v1/responses");
   expect(sent?.body.model).toBe("gpt-6.2-sol");
   expect(sent?.body.instructions).toContain("Japanese");
+  expect(sent?.body.text?.format).toMatchObject({
+    type: "json_schema",
+    name: "dictionary_entry",
+  });
   expect(sent?.body.input?.[0]?.content).toContain("[[bank]]");
 });
 
@@ -292,5 +331,5 @@ test("looks up the selection when the shortcut message arrives", async ({
     }
   });
 
-  await expect(panel(page)).toContainText("안녕하세요");
+  await expectFinishedEntry(page);
 });

@@ -3,7 +3,8 @@
  * page the tests select text on.
  *
  * - `POST /v1/messages` and `POST /v1/responses` stream a recorded answer
- *   from `spec/fixtures`, or answer 401 when the key is `bad-key`.
+ *   from `spec/fixtures`: a dictionary entry as JSON when the request asks
+ *   for a JSON schema, plain text otherwise. A key of `bad-key` gets a 401.
  * - `GET /requests` returns every request body received so far, so a test can
  *   check what the extension sent. `DELETE /requests` clears the list.
  */
@@ -32,10 +33,23 @@ const CORS = {
   "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
 };
 
-const STREAMS: Record<string, string> = {
-  "/v1/messages": "anthropic-text.sse",
-  "/v1/responses": "openai-text.sse",
+/** Recorded answers per endpoint: plain text, and JSON held to a schema. */
+const STREAMS: Record<string, { text: string; json: string }> = {
+  "/v1/messages": {
+    text: "anthropic-text.sse",
+    json: "anthropic-define.sse",
+  },
+  "/v1/responses": { text: "openai-text.sse", json: "openai-define.sse" },
 };
+
+/** Whether a request body asks for JSON in a schema, in either API's shape. */
+function asksForJson(body: unknown): boolean {
+  const request = body as {
+    output_config?: { format?: unknown };
+    text?: { format?: unknown };
+  };
+  return Boolean(request.output_config?.format ?? request.text?.format);
+}
 
 interface RecordedRequest {
   path: string;
@@ -79,9 +93,10 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  const stream = STREAMS[path];
-  if (request.method === "POST" && stream) {
-    requests.push({ path, body: JSON.parse(await readBody(request)) });
+  const streams = STREAMS[path];
+  if (request.method === "POST" && streams) {
+    const body: unknown = JSON.parse(await readBody(request));
+    requests.push({ path, body });
 
     if (request.headers.authorization === "Bearer bad-key") {
       const error = { type: "authentication_error", message: "invalid key" };
@@ -97,10 +112,11 @@ const server = createServer(async (request, response) => {
       "cache-control": "no-cache",
     });
     // Send one event at a time, so the extension sees a real stream.
-    for (const event of fixture(stream).split("\n\n")) {
+    const recorded = asksForJson(body) ? streams.json : streams.text;
+    for (const event of fixture(recorded).split("\n\n")) {
       if (event.trim() === "") continue;
       response.write(`${event}\n\n`);
-      await sleep(20);
+      await sleep(5);
     }
     response.end();
     return;
