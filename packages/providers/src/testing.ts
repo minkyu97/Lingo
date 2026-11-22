@@ -51,6 +51,16 @@ export async function collect(
   return chunks;
 }
 
+/** A request that asks for JSON in a schema, as a definition lookup does. */
+export const jsonRequest: ChatRequest = {
+  system: "You are a dictionary.",
+  messages: [{ role: "user", content: "<selection>bank</selection>" }],
+  format: {
+    name: "dictionary_entry",
+    schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+};
+
 export const sampleRequest: ChatRequest = {
   system: "You are a translator.",
   messages: [{ role: "user", content: "<selection>Hello</selection>" }],

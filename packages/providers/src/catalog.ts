@@ -11,6 +11,8 @@ export interface AnthropicModelTraits {
   effort: boolean;
   /** Has server-side fallback for requests the model declines. */
   fallbacks: boolean;
+  /** Can be held to a JSON schema with `output_config.format`. */
+  structuredOutput: boolean;
 }
 
 /**
@@ -24,26 +26,38 @@ export const ANTHROPIC_MODELS: Readonly<Record<string, AnthropicModelTraits>> =
       label: "Claude Opus 5.5",
       effort: true,
       fallbacks: true,
+      structuredOutput: true,
     },
     "claude-sonnet-5-5": {
       label: "Claude Sonnet 5.5",
       effort: true,
       fallbacks: true,
+      structuredOutput: true,
     },
     "claude-haiku-5-5": {
       label: "Claude Haiku 5.5",
       effort: true,
       fallbacks: false,
+      structuredOutput: true,
     },
   };
 
 export const ANTHROPIC_DEFAULT_MODEL = "claude-opus-5-5";
 
-/** OpenAI models offered in settings. */
-export const OPENAI_MODELS: Readonly<Record<string, { label: string }>> = {
-  "gpt-6.2-sol": { label: "GPT-6.2 Sol" },
-  "gpt-6.2-astra": { label: "GPT-6.2 Astra" },
-  "gpt-6-luna": { label: "GPT-6 Luna" },
+export interface OpenAIModelTraits {
+  label: string;
+  /** Can be held to a JSON schema with `text.format`. */
+  structuredOutput: boolean;
+}
+
+/**
+ * OpenAI models offered in settings. As with Anthropic, parameters that some
+ * models reject are sent only to models listed here.
+ */
+export const OPENAI_MODELS: Readonly<Record<string, OpenAIModelTraits>> = {
+  "gpt-6.2-sol": { label: "GPT-6.2 Sol", structuredOutput: true },
+  "gpt-6.2-astra": { label: "GPT-6.2 Astra", structuredOutput: true },
+  "gpt-6-luna": { label: "GPT-6 Luna", structuredOutput: true },
 };
 
 export const OPENAI_DEFAULT_MODEL = "gpt-6.2-sol";

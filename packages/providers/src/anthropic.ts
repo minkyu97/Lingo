@@ -40,13 +40,27 @@ export function createAnthropicProvider(
     request: ChatRequest,
     { signal }: StreamOptions = {},
   ): AsyncGenerator<string> {
+    const outputConfig = {
+      // Lookups are simple, so trade reasoning depth for a faster first token.
+      ...(traits?.effort ? { effort: "low" as const } : {}),
+      // Hold the answer to the requested JSON schema where the model can be.
+      ...(traits?.structuredOutput && request.format
+        ? {
+            format: {
+              type: "json_schema" as const,
+              schema: request.format.schema,
+            },
+          }
+        : {}),
+    };
     const params = {
       model,
       max_tokens: MAX_TOKENS,
       system: request.system,
       messages: request.messages,
-      // Lookups are simple, so trade reasoning depth for a faster first token.
-      ...(traits?.effort ? { output_config: { effort: "low" as const } } : {}),
+      ...(Object.keys(outputConfig).length > 0
+        ? { output_config: outputConfig }
+        : {}),
     };
 
     try {

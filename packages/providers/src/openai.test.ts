@@ -1,4 +1,4 @@
-import { LLMError } from "@lingo/core";
+import { LLMError, parseDictionaryEntry } from "@lingo/core";
 import { describe, expect, it } from "vitest";
 import { createOpenAIProvider } from "./openai.ts";
 import {
@@ -6,6 +6,7 @@ import {
   errorResponse,
   fakeFetch,
   fixture,
+  jsonRequest,
   sampleRequest,
   sseResponse,
 } from "./testing.ts";
@@ -62,6 +63,37 @@ describe("createOpenAIProvider", () => {
     );
     await collect(provider, sampleRequest);
     expect(calls[0]?.body).toMatchObject({ model: "gpt-6-luna" });
+  });
+
+  it("holds a known model to the requested JSON schema", async () => {
+    const { provider, calls } = providerFor(() =>
+      sseResponse(fixture("openai-define.sse")),
+    );
+    const chunks = await collect(provider, jsonRequest);
+
+    expect(calls[0]?.body).toMatchObject({
+      text: {
+        format: {
+          type: "json_schema",
+          name: "dictionary_entry",
+          schema: jsonRequest.format?.schema,
+          strict: true,
+        },
+      },
+    });
+    expect(chunks.length).toBeGreaterThan(10);
+    const entry = parseDictionaryEntry(chunks.join(""));
+    expect(entry?.headword).toBe("bank");
+    expect(entry?.senses).toHaveLength(3);
+  });
+
+  it("does not send a schema to a model it does not know", async () => {
+    const { provider, calls } = providerFor(
+      () => sseResponse(fixture("openai-define.sse")),
+      "some-custom-model",
+    );
+    await collect(provider, jsonRequest);
+    expect(calls[0]?.body).not.toHaveProperty("text");
   });
 
   it("reports a refusal", async () => {

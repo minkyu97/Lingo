@@ -1,4 +1,4 @@
-import { LLMError } from "@lingo/core";
+import { LLMError, parseDictionaryEntry } from "@lingo/core";
 import { describe, expect, it } from "vitest";
 import { createAnthropicProvider } from "./anthropic.ts";
 import {
@@ -6,6 +6,7 @@ import {
   errorResponse,
   fakeFetch,
   fixture,
+  jsonRequest,
   sampleRequest,
   sseResponse,
 } from "./testing.ts";
@@ -93,6 +94,42 @@ describe("createAnthropicProvider", () => {
     expect(calls[0]?.body).toMatchObject({ model: "some-custom-model" });
     expect(calls[0]?.body).not.toHaveProperty("output_config");
     expect(calls[0]?.body).not.toHaveProperty("fallbacks");
+  });
+
+  it("holds a known model to the requested JSON schema", async () => {
+    const { provider, calls } = providerFor(() =>
+      sseResponse(fixture("anthropic-define.sse")),
+    );
+    const chunks = await collect(provider, jsonRequest);
+
+    expect(calls[0]?.body).toMatchObject({
+      output_config: {
+        effort: "low",
+        format: { type: "json_schema", schema: jsonRequest.format?.schema },
+      },
+    });
+    expect(chunks.length).toBeGreaterThan(10);
+    const entry = parseDictionaryEntry(chunks.join(""));
+    expect(entry?.headword).toBe("bank");
+    expect(entry?.senses).toHaveLength(3);
+  });
+
+  it("does not send a schema with a plain text request", async () => {
+    const { provider, calls } = providerFor(() =>
+      sseResponse(fixture("anthropic-text.sse")),
+    );
+    await collect(provider, sampleRequest);
+    expect(calls[0]?.body).toMatchObject({ output_config: { effort: "low" } });
+    expect(calls[0]?.body.output_config).not.toHaveProperty("format");
+  });
+
+  it("does not send a schema to a model it does not know", async () => {
+    const { provider, calls } = providerFor(
+      () => sseResponse(fixture("anthropic-define.sse")),
+      "some-custom-model",
+    );
+    await collect(provider, jsonRequest);
+    expect(calls[0]?.body).not.toHaveProperty("output_config");
   });
 
   it("reports a refusal", async () => {

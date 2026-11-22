@@ -5,7 +5,7 @@ import {
   type StreamOptions,
 } from "@lingo/core";
 import OpenAI from "openai";
-import { OPENAI_DEFAULT_MODEL } from "./catalog.ts";
+import { OPENAI_DEFAULT_MODEL, OPENAI_MODELS } from "./catalog.ts";
 
 export interface OpenAIProviderOptions {
   apiKey: string;
@@ -20,6 +20,7 @@ export function createOpenAIProvider(
   options: OpenAIProviderOptions,
 ): LLMProvider {
   const model = options.model ?? OPENAI_DEFAULT_MODEL;
+  const traits = OPENAI_MODELS[model];
   const client = new OpenAI({
     apiKey: options.apiKey,
     baseURL: options.baseURL,
@@ -45,6 +46,19 @@ export function createOpenAIProvider(
           stream: true,
           // Do not keep the user's text on OpenAI's side after the request.
           store: false,
+          // Hold the answer to the requested JSON schema where the model can be.
+          ...(traits?.structuredOutput && request.format
+            ? {
+                text: {
+                  format: {
+                    type: "json_schema" as const,
+                    name: request.format.name,
+                    schema: request.format.schema,
+                    strict: true,
+                  },
+                },
+              }
+            : {}),
         },
         { signal },
       );
