@@ -18,7 +18,8 @@
     "@lingo/providers": "workspace:*",
     "@lingo/ui": "workspace:*",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
