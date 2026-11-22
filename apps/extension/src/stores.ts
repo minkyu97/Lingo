@@ -1,13 +1,18 @@
 import {
   normalizeSettings,
-  PROVIDER_IDS,
   type ProviderId,
+  perProviderTextSchema,
   type Settings,
 } from "@lingo/core";
 import { browser } from "wxt/browser";
 import { storage } from "wxt/utils/storage";
+import * as z from "zod/mini";
 
-export type ApiKeys = Partial<Record<ProviderId, string>>;
+/** One API key per provider, for the providers that have one. */
+export type ApiKeys = z.infer<typeof perProviderTextSchema>;
+
+/** What is in storage may be old or damaged. Anything unusable reads as no keys. */
+const storedApiKeys = z.catch(perProviderTextSchema, {});
 
 const settingsItem = storage.defineItem<unknown>("local:settings");
 const apiKeysItem = storage.defineItem<unknown>("local:apiKeys");
@@ -22,16 +27,7 @@ export async function saveSettings(settings: Settings): Promise<void> {
 }
 
 export async function loadApiKeys(): Promise<ApiKeys> {
-  const stored = await apiKeysItem.getValue();
-  const keys: ApiKeys = {};
-  if (typeof stored !== "object" || stored === null) return keys;
-  for (const provider of PROVIDER_IDS) {
-    const key = (stored as Record<string, unknown>)[provider];
-    if (typeof key === "string" && key.trim() !== "") {
-      keys[provider] = key.trim();
-    }
-  }
-  return keys;
+  return storedApiKeys.parse(await apiKeysItem.getValue());
 }
 
 export async function loadApiKey(
@@ -42,12 +38,7 @@ export async function loadApiKey(
 
 /** Replaces the stored keys. An empty or missing entry removes that key. */
 export async function saveApiKeys(keys: ApiKeys): Promise<void> {
-  const cleaned: ApiKeys = {};
-  for (const provider of PROVIDER_IDS) {
-    const key = keys[provider]?.trim();
-    if (key) cleaned[provider] = key;
-  }
-  await apiKeysItem.setValue(cleaned);
+  await apiKeysItem.setValue(perProviderTextSchema.parse(keys));
 }
 
 /**
