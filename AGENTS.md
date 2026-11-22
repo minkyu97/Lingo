@@ -59,12 +59,13 @@ This file is loaded into every agent session, so keep it short and keep it true.
 
 Run `mise install` once to get the pinned Node and pnpm, then `pnpm install`. If your shell does not activate mise, prefix commands with `mise x --`.
 
-| Command          | What it does                                                                       |
-| ---------------- | ---------------------------------------------------------------------------------- |
-| `pnpm lint`      | Checks formatting, lint rules, and import order without changing files. CI runs it |
-| `pnpm format`    | Applies formatting and safe lint fixes                                             |
-| `pnpm typecheck` | Type-checks every package                                                          |
-| `pnpm test`      | Runs the unit tests of every package                                               |
+| Command          | What it does                                                                                                                |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`      | Checks formatting, lint rules, and import order without changing files. CI runs it                                          |
+| `pnpm format`    | Applies formatting and safe lint fixes                                                                                      |
+| `pnpm typecheck` | Type-checks every package                                                                                                   |
+| `pnpm test`      | Runs the unit tests of every package                                                                                        |
+| `pnpm smoke`     | Calls the real provider APIs through the adapters. Needs API keys in `.env.local`, costs a few cents, and is not part of CI |
 
 ## Code style
 
@@ -146,6 +147,7 @@ CI runs on GitHub Actions.
 - When you add tests, whether a new suite or a new package or app that has tests, wire them into the CI workflow **in the same change**. A test that does not run in CI is not finished.
 - A pull request is ready to merge only when CI passes. Do not skip, disable, or weaken a failing test to make it pass.
 - Path filters may limit a job to the surfaces a change can affect. Tests are never skipped for any other reason.
+- The one check outside CI is `pnpm smoke`. It sends real requests with your own API keys and costs money, so run it by hand after changing a provider adapter.
 - The workflow is `.github/workflows/ci.yml`. It installs the toolchain from `mise.toml`, so local and CI versions match.
 
 ## Agent tooling

@@ -10,7 +10,8 @@
     "lint": "biome check",
     "format": "biome check --write",
     "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test"
+    "test": "pnpm -r run test",
+    "smoke": "pnpm --filter @lingo/providers run smoke"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",
