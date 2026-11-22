@@ -1,4 +1,9 @@
-import type { CapturedContext, LLMErrorKind, LookupMode } from "@lingo/core";
+import {
+  type CapturedContext,
+  type LLMErrorKind,
+  LOOKUP_MODES,
+} from "@lingo/core";
+import * as z from "zod/mini";
 
 /** Name of the port a content script opens for one lookup. */
 export const LOOKUP_PORT = "lingo:lookup";
@@ -9,14 +14,64 @@ export const MAX_SELECTION_CHARS = 10_000;
 /** Longest surrounding text accepted on each side before settings apply. */
 const MAX_SIDE_CHARS = 8_000;
 
-/** Content script to background: sent once, right after the port opens. */
-export interface LookupRequest {
-  type: "start";
-  mode: LookupMode;
-  context: CapturedContext;
-}
+/**
+ * An optional piece of text from the page. Anything that is not text with
+ * something in it reads as absent, rather than failing the whole message.
+ */
+const pageText = z.catch(
+  z.optional(z.string().check(z.minLength(1))),
+  undefined,
+);
 
-/** Background to content script, over the lookup port. */
+/**
+ * Content scripts run inside web pages, so the background does not trust what
+ * they send: the shape is checked, sizes are capped, and the context level is
+ * worked out from the text instead of taken from the sender.
+ */
+const lookupRequestSchema = z.object({
+  type: z.literal("start"),
+  mode: z.enum(LOOKUP_MODES),
+  context: z.pipe(
+    z.object({
+      selection: z
+        .string()
+        .check(z.trim(), z.minLength(1), z.maxLength(MAX_SELECTION_CHARS)),
+      before: pageText,
+      after: pageText,
+      title: pageText,
+      url: pageText,
+    }),
+    z.transform(
+      (context: {
+        selection: string;
+        before?: string;
+        after?: string;
+        title?: string;
+        url?: string;
+      }): CapturedContext => {
+        const before = context.before?.slice(-MAX_SIDE_CHARS);
+        const after = context.after?.slice(0, MAX_SIDE_CHARS);
+        return {
+          selection: context.selection,
+          level: before || after ? "paragraph" : "none",
+          before,
+          after,
+          title: context.title?.slice(0, 300),
+          url: context.url?.slice(0, 2000),
+        };
+      },
+    ),
+  ),
+});
+
+/** Content script to background: sent once, right after the port opens. */
+export type LookupRequest = z.infer<typeof lookupRequestSchema>;
+
+/**
+ * Background to content script, over the lookup port. The background is part
+ * of the extension and trusted, so these are typed but not checked at run
+ * time.
+ */
 export type LookupEvent =
   /** The request is on its way. `context` is what was actually sent. */
   | { type: "started"; context: CapturedContext }
@@ -29,56 +84,25 @@ export type LookupEvent =
 /** Name of the keyboard command declared in the manifest. */
 export const LOOKUP_COMMAND = "lookup-selection";
 
-/** One-off messages sent with `runtime.sendMessage` or `tabs.sendMessage`. */
-export type RuntimeMessage =
+const runtimeMessageSchema = z.discriminatedUnion("type", [
   /** Content script to background. */
-  | { type: "open-settings" }
+  z.object({ type: z.literal("open-settings") }),
   /** Background to content script, when the keyboard shortcut is pressed. */
-  | { type: "lookup-selection" };
+  z.object({ type: z.literal("lookup-selection") }),
+]);
+
+/** One-off messages sent with `runtime.sendMessage` or `tabs.sendMessage`. */
+export type RuntimeMessage = z.infer<typeof runtimeMessageSchema>;
 
 export function isRuntimeMessage(value: unknown): value is RuntimeMessage {
-  if (!isRecord(value)) return false;
-  return value.type === "open-settings" || value.type === "lookup-selection";
+  return runtimeMessageSchema.safeParse(value).success;
 }
 
 /**
- * Validates a message that arrived on the lookup port. Content scripts run
- * inside web pages, so the background does not trust the shape of what they
- * send.
+ * Reads a message that arrived on the lookup port. Returns `undefined` for
+ * anything that is not a valid request.
  */
 export function parseLookupRequest(value: unknown): LookupRequest | undefined {
-  if (!isRecord(value) || value.type !== "start") return undefined;
-  if (value.mode !== "translate" && value.mode !== "define") return undefined;
-
-  const context = value.context;
-  if (!isRecord(context) || typeof context.selection !== "string") {
-    return undefined;
-  }
-  const selection = context.selection.trim();
-  if (selection === "" || selection.length > MAX_SELECTION_CHARS) {
-    return undefined;
-  }
-
-  const before = text(context.before)?.slice(-MAX_SIDE_CHARS);
-  const after = text(context.after)?.slice(0, MAX_SIDE_CHARS);
-  return {
-    type: "start",
-    mode: value.mode,
-    context: {
-      selection,
-      level: before || after ? "paragraph" : "none",
-      before,
-      after,
-      title: text(context.title)?.slice(0, 300),
-      url: text(context.url)?.slice(0, 2000),
-    },
-  };
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value !== "" ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  const parsed = lookupRequestSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
