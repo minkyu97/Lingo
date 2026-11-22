@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { CapturedContext } from "./context.ts";
 import {
   buildLookupRequest,
+  DICTIONARY_ENTRY_FORMAT,
   type LookupMode,
   type PromptVariant,
   renderSystemPrompt,
@@ -27,6 +28,61 @@ describe("buildLookupRequest", () => {
     expect(request.messages).toEqual([
       { role: "user", content: expected.user },
     ]);
+  });
+});
+
+describe("the answer format", () => {
+  const context: CapturedContext = { selection: "bank", level: "none" };
+
+  it("asks for a dictionary entry as JSON when defining", () => {
+    const request = buildLookupRequest({
+      mode: "define",
+      context,
+      targetLanguage: "Korean",
+    });
+    expect(request.format).toBe(DICTIONARY_ENTRY_FORMAT);
+    expect(request.format?.name).toBe("dictionary_entry");
+  });
+
+  it("asks for plain text when translating", () => {
+    const request = buildLookupRequest({
+      mode: "translate",
+      context,
+      targetLanguage: "Korean",
+    });
+    expect(request.format).toBeUndefined();
+  });
+
+  it("describes in the prompt every field the schema requires", () => {
+    const schema = DICTIONARY_ENTRY_FORMAT.schema as {
+      required: string[];
+      properties: { senses: { items: { required: string[] } } };
+    };
+    const fields = [
+      ...schema.required,
+      ...schema.properties.senses.items.required,
+    ];
+    for (const variant of ["withContext", "withoutContext"] as const) {
+      const system = renderSystemPrompt("define", variant, "Korean");
+      for (const field of fields) {
+        expect(system, `${variant} mentions ${field}`).toContain(`"${field}"`);
+      }
+    }
+  });
+
+  it("uses a schema that strict structured outputs accept", () => {
+    const check = (node: unknown): void => {
+      if (typeof node !== "object" || node === null) return;
+      const schema = node as Record<string, unknown>;
+      if (schema.type === "object") {
+        expect(schema.additionalProperties).toBe(false);
+        expect([...(schema.required as string[])].sort()).toEqual(
+          Object.keys(schema.properties as object).sort(),
+        );
+      }
+      for (const child of Object.values(schema)) check(child);
+    };
+    check(DICTIONARY_ENTRY_FORMAT.schema);
   });
 });
 

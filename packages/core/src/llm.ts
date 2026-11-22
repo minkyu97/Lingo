@@ -5,11 +5,26 @@ export interface ChatMessage {
   content: string;
 }
 
+/** Asks for an answer that is one JSON document matching a schema. */
+export interface ResponseFormat {
+  /** A short identifier for the format, such as "dictionary_entry". */
+  name: string;
+  /** The JSON Schema the answer must follow. */
+  schema: Record<string, unknown>;
+}
+
 /** A provider-neutral request: instructions plus a conversation. */
 export interface ChatRequest {
   /** Instructions for the model, kept apart from the conversation. */
   system: string;
   messages: ChatMessage[];
+  /**
+   * When set, the answer is JSON in this format instead of free text. An
+   * adapter enforces the schema where the model supports it. Either way the
+   * instructions must also describe the format, since some models only have
+   * those to go on.
+   */
+  format?: ResponseFormat;
 }
 
 export interface StreamOptions {

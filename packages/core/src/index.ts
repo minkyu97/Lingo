@@ -21,6 +21,7 @@ export {
   LLMError,
   type LLMErrorKind,
   type LLMProvider,
+  type ResponseFormat,
   type StreamOptions,
 } from "./llm.ts";
 export {
@@ -32,6 +33,7 @@ export { chooseMode } from "./mode.ts";
 export { parsePartialJson } from "./partial-json.ts";
 export {
   buildLookupRequest,
+  DICTIONARY_ENTRY_FORMAT,
   type LookupInput,
   type LookupMode,
   type PromptVariant,

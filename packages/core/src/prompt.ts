@@ -1,6 +1,9 @@
+import dictionaryEntrySchema from "@lingo/spec/dictionary-entry.schema.json" with {
+  type: "json",
+};
 import prompts from "@lingo/spec/prompts.json" with { type: "json" };
 import { type CapturedContext, hasSurroundingText } from "./context.ts";
-import type { ChatRequest } from "./llm.ts";
+import type { ChatRequest, ResponseFormat } from "./llm.ts";
 
 /** What to do with a selection: translate it, or explain it like a dictionary. */
 export type LookupMode = "translate" | "define";
@@ -13,6 +16,12 @@ export interface LookupInput {
 }
 
 export type PromptVariant = "withContext" | "withoutContext";
+
+/** The JSON a definition is requested in. `parseDictionaryEntry` reads it. */
+export const DICTIONARY_ENTRY_FORMAT: ResponseFormat = {
+  name: "dictionary_entry",
+  schema: dictionaryEntrySchema,
+};
 
 /** The context variant of the system prompt that fits what was captured. */
 export function promptVariant(context: CapturedContext): PromptVariant {
@@ -41,6 +50,8 @@ export function buildLookupRequest(input: LookupInput): ChatRequest {
   return {
     system: renderSystemPrompt(mode, variant, targetLanguage),
     messages: [{ role: "user", content: renderUserMessage(context, variant) }],
+    // A definition is rendered as a dictionary entry, so it comes as JSON.
+    ...(mode === "define" ? { format: DICTIONARY_ENTRY_FORMAT } : {}),
   };
 }
 
