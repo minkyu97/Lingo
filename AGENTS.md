@@ -39,9 +39,10 @@ Configuration:
 Code:
 
 - `packages/core`: `@lingo/core`. Domain types, ports, and use cases in plain TypeScript, with no platform or provider dependencies.
+- `packages/providers`: `@lingo/providers`. LLM adapters for Anthropic and OpenAI behind the core's `LLMProvider` port, and the list of models offered in settings.
 - `spec/`: `@lingo/spec`. Prompt templates and test vectors as data, shared by every implementation of the core.
 
-Planned but not yet created: `packages/providers`, `packages/ui`, and `apps/` (`extension`, `desktop`, `apple`). See [the planned layout](docs/architecture.md#repository-layout).
+Planned but not yet created: `packages/ui` and `apps/` (`extension`, `desktop`, `apple`). See [the planned layout](docs/architecture.md#repository-layout).
 
 ## Keeping this file current
 

@@ -1,0 +1,24 @@
+{
+  "name": "@lingo/providers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
+    "@lingo/core": "workspace:*",
+    "openai": "^7.62.0"
+  },
+  "devDependencies": {
+    "@lingo/spec": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
