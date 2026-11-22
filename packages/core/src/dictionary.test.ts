@@ -130,7 +130,7 @@ describe("hasDictionaryContent", () => {
 });
 
 describe("groupSenses", () => {
-  it("groups consecutive senses with the same part of speech", () => {
+  it("makes one group per part of speech", () => {
     const groups = groupSenses(entry.senses);
     expect(groups.map((group) => group.partOfSpeech)).toEqual(["명사", "동사"]);
     expect(groups[0]?.senses.map((sense) => sense.meaning)).toEqual([
@@ -139,13 +139,10 @@ describe("groupSenses", () => {
     ]);
   });
 
-  it("starts a new group when a part of speech comes back", () => {
+  it("joins senses of one part of speech that arrive apart", () => {
     const groups = groupSenses([riverBank, deposit, moneyBank]);
-    expect(groups.map((group) => group.partOfSpeech)).toEqual([
-      "명사",
-      "동사",
-      "명사",
-    ]);
+    expect(groups.map((group) => group.partOfSpeech)).toEqual(["명사", "동사"]);
+    expect(groups[0]?.senses).toEqual([riverBank, moneyBank]);
   });
 
   it("leaves out senses whose meaning has not arrived", () => {

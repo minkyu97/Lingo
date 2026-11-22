@@ -73,16 +73,19 @@ export interface SenseGroup {
 }
 
 /**
- * Groups consecutive senses that share a part of speech, the way a dictionary
- * lists them. Senses whose meaning has not arrived yet are left out.
+ * Groups senses by part of speech, the way a dictionary lists them: one group
+ * per part of speech, in the order each first appears. Senses whose meaning
+ * has not arrived yet are left out.
  */
 export function groupSenses(senses: readonly DictionarySense[]): SenseGroup[] {
   const groups: SenseGroup[] = [];
   for (const sense of senses) {
     if (!sense.meaning) continue;
-    const last = groups.at(-1);
-    if (last && last.partOfSpeech === sense.partOfSpeech) {
-      last.senses.push(sense);
+    const group = groups.find(
+      ({ partOfSpeech }) => partOfSpeech === sense.partOfSpeech,
+    );
+    if (group) {
+      group.senses.push(sense);
     } else {
       groups.push({ partOfSpeech: sense.partOfSpeech, senses: [sense] });
     }
