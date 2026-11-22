@@ -33,7 +33,7 @@ Configuration:
 - `biome.json`: lint and format rules for TypeScript, JSON, CSS, HTML, Markdown, and YAML.
 - `.editorconfig`: indentation, line endings, and charset for every file. Biome reads it.
 - `.gitattributes`: checks text files out with LF line endings on every platform.
-- `.github/workflows/ci.yml`: CI. Runs lint, typecheck, and tests on every pull request.
+- `.github/workflows/ci.yml`: CI. Runs lint, typecheck, tests, and the build on every pull request.
 - `.gitignore`: ignore rules for OS files, secrets, Node, build output, Rust/Tauri, and Xcode.
 
 Code:
@@ -41,9 +41,10 @@ Code:
 - `packages/core`: `@lingo/core`. Domain types, ports, and use cases in plain TypeScript, with no platform or provider dependencies.
 - `packages/providers`: `@lingo/providers`. LLM adapters for Anthropic and OpenAI behind the core's `LLMProvider` port, and the list of models offered in settings.
 - `packages/ui`: `@lingo/ui`. React components and styles shared by the extension and, later, the desktop app.
+- `apps/extension`: `@lingo/extension`. The browser extension, built with WXT. Entry points are in `entrypoints/`, and the build output goes to `.output/`.
 - `spec/`: `@lingo/spec`. Prompt templates and test vectors as data, shared by every implementation of the core.
 
-Planned but not yet created: `apps/` (`extension`, `desktop`, `apple`). See [the planned layout](docs/architecture.md#repository-layout).
+Planned but not yet created: `apps/desktop` and `apps/apple`. See [the planned layout](docs/architecture.md#repository-layout).
 
 ## Keeping this file current
 
@@ -60,13 +61,15 @@ This file is loaded into every agent session, so keep it short and keep it true.
 
 Run `mise install` once to get the pinned Node and pnpm, then `pnpm install`. If your shell does not activate mise, prefix commands with `mise x --`.
 
-| Command          | What it does                                                                                                                |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm lint`      | Checks formatting, lint rules, and import order without changing files. CI runs it                                          |
-| `pnpm format`    | Applies formatting and safe lint fixes                                                                                      |
-| `pnpm typecheck` | Type-checks every package                                                                                                   |
-| `pnpm test`      | Runs the unit tests of every package                                                                                        |
-| `pnpm smoke`     | Calls the real provider APIs through the adapters. Needs API keys in `.env.local`, costs a few cents, and is not part of CI |
+| Command                              | What it does                                                                                                                     |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`                          | Checks formatting, lint rules, and import order without changing files. CI runs it                                               |
+| `pnpm format`                        | Applies formatting and safe lint fixes                                                                                           |
+| `pnpm typecheck`                     | Type-checks every package                                                                                                        |
+| `pnpm test`                          | Runs the unit tests of every package                                                                                             |
+| `pnpm build`                         | Builds the extension into `apps/extension/.output/chrome-mv3`                                                                    |
+| `pnpm --filter @lingo/extension dev` | Rebuilds the extension on change into `.output/chrome-mv3-dev`. Load that folder in `chrome://extensions` with developer mode on |
+| `pnpm smoke`                         | Calls the real provider APIs through the adapters. Needs API keys in `.env.local`, costs a few cents, and is not part of CI      |
 
 ## Code style
 

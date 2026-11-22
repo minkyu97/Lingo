@@ -11,6 +11,7 @@
     "format": "biome check --write",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
+    "build": "pnpm -r run build",
     "smoke": "pnpm --filter @lingo/providers run smoke"
   },
   "devDependencies": {

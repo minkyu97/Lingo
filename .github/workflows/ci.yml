@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   check:
-    name: Lint, typecheck, test
+    name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -39,3 +39,5 @@ jobs:
       - run: pnpm typecheck
 
       - run: pnpm test
+
+      - run: pnpm build

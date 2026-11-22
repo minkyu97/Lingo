@@ -1,0 +1,31 @@
+{
+  "name": "@lingo/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "@lingo/core": "workspace:*",
+    "@lingo/providers": "workspace:*",
+    "@lingo/ui": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@wxt-dev/module-react": "^1.2.2",
+    "jsdom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "^8.3.8",
+    "vitest": "catalog:",
+    "wxt": "^0.21.5"
+  }
+}
