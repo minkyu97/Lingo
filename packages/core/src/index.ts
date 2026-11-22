@@ -34,6 +34,7 @@ export { parsePartialJson } from "./partial-json.ts";
 export {
   buildLookupRequest,
   DICTIONARY_ENTRY_FORMAT,
+  LOOKUP_MODES,
   type LookupInput,
   type LookupMode,
   type PromptVariant,

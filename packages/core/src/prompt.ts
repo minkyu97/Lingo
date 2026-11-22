@@ -5,8 +5,10 @@ import prompts from "@lingo/spec/prompts.json" with { type: "json" };
 import { type CapturedContext, hasSurroundingText } from "./context.ts";
 import type { ChatRequest, ResponseFormat } from "./llm.ts";
 
+export const LOOKUP_MODES = ["translate", "define"] as const;
+
 /** What to do with a selection: translate it, or explain it like a dictionary. */
-export type LookupMode = "translate" | "define";
+export type LookupMode = (typeof LOOKUP_MODES)[number];
 
 export interface LookupInput {
   mode: LookupMode;

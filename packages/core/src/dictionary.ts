@@ -1,33 +1,50 @@
+import * as z from "zod/mini";
 import { parsePartialJson } from "./partial-json.ts";
+
+/**
+ * A text field of an entry. It reads as empty until it has arrived, and when
+ * the model sent something that is not text.
+ */
+const textField = z.catch(z.string(), "");
 
 /**
  * One meaning of a term. The shape matches
  * `spec/dictionary-entry.schema.json`, where an absent value is an empty
  * string rather than a missing field.
  */
-export interface DictionarySense {
+const senseSchema = z.object({
   /** The part of speech, named in the reader's language. */
-  partOfSpeech: string;
+  partOfSpeech: textField,
   /** A short equivalent or definition in the reader's language. */
-  meaning: string;
+  meaning: textField,
   /** Whether this is the sense the term has in the captured passage. */
-  inContext: boolean;
+  inContext: z.catch(z.boolean(), false),
   /** A short example in the term's own language. */
-  example: string;
+  example: textField,
   /** The example in the reader's language. */
-  exampleTranslation: string;
-}
+  exampleTranslation: textField,
+});
+
+export type DictionarySense = z.infer<typeof senseSchema>;
 
 /** A dictionary entry for a looked-up term. */
-export interface DictionaryEntry {
+const entrySchema = z.object({
   /** The dictionary form of the term, in the term's own language. */
-  headword: string;
+  headword: textField,
   /** IPA, or a reading such as kana or pinyin. */
-  pronunciation: string;
+  pronunciation: textField,
   /** What the term means in the captured passage. Empty without a passage. */
-  contextMeaning: string;
-  senses: DictionarySense[];
-}
+  contextMeaning: textField,
+  // A member that is not an object is dropped. The others are kept.
+  senses: z.pipe(
+    z.catch(z.array(z.catch(z.nullable(senseSchema), null)), []),
+    z.transform((senses: (DictionarySense | null)[]) =>
+      senses.filter((sense) => sense !== null),
+    ),
+  ),
+});
+
+export type DictionaryEntry = z.infer<typeof entrySchema>;
 
 /**
  * Reads a dictionary entry from a model's JSON answer. The text may be
@@ -40,22 +57,8 @@ export interface DictionaryEntry {
 export function parseDictionaryEntry(
   text: string,
 ): DictionaryEntry | undefined {
-  const value = parsePartialJson(text);
-  if (!isRecord(value)) return undefined;
-
-  const senses = Array.isArray(value.senses) ? value.senses : [];
-  return {
-    headword: string(value.headword),
-    pronunciation: string(value.pronunciation),
-    contextMeaning: string(value.contextMeaning),
-    senses: senses.filter(isRecord).map((sense) => ({
-      partOfSpeech: string(sense.partOfSpeech),
-      meaning: string(sense.meaning),
-      inContext: sense.inContext === true,
-      example: string(sense.example),
-      exampleTranslation: string(sense.exampleTranslation),
-    })),
-  };
+  const parsed = entrySchema.safeParse(parsePartialJson(text));
+  return parsed.success ? parsed.data : undefined;
 }
 
 /** Whether the entry has anything to show yet. */
@@ -116,12 +119,4 @@ export function dictionaryEntryToText(entry: DictionaryEntry): string {
     });
   }
   return lines.join("\n").trim();
-}
-
-function string(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
