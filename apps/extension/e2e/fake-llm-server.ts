@@ -1,0 +1,114 @@
+/**
+ * Stands in for the provider APIs in end-to-end tests. It also serves the
+ * page the tests select text on.
+ *
+ * - `POST /v1/messages` and `POST /v1/responses` stream a recorded answer
+ *   from `spec/fixtures`, or answer 401 when the key is `bad-key`.
+ * - `GET /requests` returns every request body received so far, so a test can
+ *   check what the extension sent. `DELETE /requests` clears the list.
+ */
+import { readFileSync } from "node:fs";
+import { createServer, type IncomingMessage } from "node:http";
+
+const PORT = 43117;
+
+const PAGE = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>A walk by the water</title>
+    <style>body { font: 18px/1.6 sans-serif; margin: 60px; }</style>
+  </head>
+  <body>
+    <h1>Test page</h1>
+    <p id="text">She sat on the river bank and watched the boats.</p>
+    <p>A second paragraph that is not part of the context.</p>
+  </body>
+</html>`;
+
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "*",
+  "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+};
+
+const STREAMS: Record<string, string> = {
+  "/v1/messages": "anthropic-text.sse",
+  "/v1/responses": "openai-text.sse",
+};
+
+interface RecordedRequest {
+  path: string;
+  body: unknown;
+}
+
+let requests: RecordedRequest[] = [];
+
+function fixture(name: string): string {
+  const url = new URL(`../../../spec/fixtures/${name}`, import.meta.url);
+  return readFileSync(url, "utf8");
+}
+
+async function readBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const server = createServer(async (request, response) => {
+  const path = request.url ?? "/";
+  const json = { ...CORS, "content-type": "application/json" };
+
+  if (request.method === "OPTIONS") {
+    response.writeHead(204, CORS).end();
+    return;
+  }
+
+  if (request.method === "GET" && path === "/page") {
+    response
+      .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end(PAGE);
+    return;
+  }
+
+  if (path === "/requests") {
+    if (request.method === "DELETE") requests = [];
+    response.writeHead(200, json).end(JSON.stringify(requests));
+    return;
+  }
+
+  const stream = STREAMS[path];
+  if (request.method === "POST" && stream) {
+    requests.push({ path, body: JSON.parse(await readBody(request)) });
+
+    if (request.headers.authorization === "Bearer bad-key") {
+      const error = { type: "authentication_error", message: "invalid key" };
+      response
+        .writeHead(401, json)
+        .end(JSON.stringify({ type: "error", error }));
+      return;
+    }
+
+    response.writeHead(200, {
+      ...CORS,
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+    });
+    // Send one event at a time, so the extension sees a real stream.
+    for (const event of fixture(stream).split("\n\n")) {
+      if (event.trim() === "") continue;
+      response.write(`${event}\n\n`);
+      await sleep(20);
+    }
+    response.end();
+    return;
+  }
+
+  response.writeHead(404, CORS).end();
+});
+
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`Fake LLM server listening on http://127.0.0.1:${PORT}`);
+});

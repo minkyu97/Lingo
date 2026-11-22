@@ -12,7 +12,8 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
-    "smoke": "pnpm --filter @lingo/providers run smoke"
+    "smoke": "pnpm --filter @lingo/providers run smoke",
+    "e2e": "pnpm --filter @lingo/extension run e2e"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",

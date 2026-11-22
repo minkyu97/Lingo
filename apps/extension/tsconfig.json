@@ -6,5 +6,6 @@
     "resolveJsonModule": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
-  }
+  },
+  "exclude": ["node_modules", ".output", "e2e", "playwright.config.ts"]
 }

@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   check:
-    name: Lint, typecheck, test, build
+    name: Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,3 +41,16 @@ jobs:
       - run: pnpm test
 
       - run: pnpm build
+
+      - name: Install Chromium for the end-to-end tests
+        run: pnpm --filter @lingo/extension exec playwright install --with-deps chromium
+
+      - run: pnpm e2e
+
+      - name: Upload end-to-end results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results
+          path: apps/extension/test-results
+          retention-days: 7
