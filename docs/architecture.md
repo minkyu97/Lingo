@@ -49,14 +49,16 @@ Releases are tagged per surface: `ext-v*`, `desktop-v*`, `ios-v*`.
 
 `packages/core` holds the domain and defines the ports. It depends only on `@lingo/spec`, which is data. Its `tsconfig.json` leaves the DOM library out, so page and browser APIs do not type-check there.
 
-| Module        | What it holds                                                                                        |
-| ------------- | ---------------------------------------------------------------------------------------------------- |
-| `context.ts`  | `CapturedContext` and `ContextLevel`; `clampContext` and `withoutContext`                            |
-| `llm.ts`      | The `LLMProvider` port, `ChatRequest`, and `LLMError` with its kinds                                 |
-| `prompt.ts`   | `buildLookupRequest`: a system prompt from `spec/prompts.json` plus the user message                 |
-| `mode.ts`     | `chooseMode`: define a word or short phrase, translate anything longer                               |
-| `settings.ts` | `Settings`, its defaults, `normalizeSettings`, and the offered target languages                      |
-| `lookup.ts`   | `prepareLookup`: the use case that applies the settings to a captured context and builds the request |
+| Module            | What it holds                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `context.ts`      | `CapturedContext` and `ContextLevel`; `clampContext` and `withoutContext`                                                 |
+| `llm.ts`          | The `LLMProvider` port, `ChatRequest` with its optional JSON `format`, and `LLMError` with its kinds                      |
+| `prompt.ts`       | `buildLookupRequest`: a system prompt from `spec/prompts.json` plus the user message, and the JSON format for definitions |
+| `dictionary.ts`   | `DictionaryEntry`, `parseDictionaryEntry` for a complete or still-streaming answer, and sense grouping                    |
+| `partial-json.ts` | `parsePartialJson`: reads as much of a JSON document as has arrived so far                                                |
+| `mode.ts`         | `chooseMode`: define a word or short phrase, translate anything longer                                                    |
+| `settings.ts`     | `Settings`, its defaults, `normalizeSettings`, and the offered target languages                                           |
+| `lookup.ts`       | `prepareLookup`: the use case that applies the settings to a captured context and builds the request                      |
 
 Each app supplies the adapters:
 
@@ -103,14 +105,14 @@ Adapters turn every provider failure into an `LLMError` with one of those kinds,
 
 ### Use cases
 
-| Use case            | What it does                                                                                                | Status  |
-| ------------------- | ----------------------------------------------------------------------------------------------------------- | ------- |
-| Translate selection | Translates the selection, using context when present                                                        | Done    |
-| Define in context   | For a word or short phrase: the meaning in this sentence when context exists, general definitions otherwise | Done    |
-| Refine              | Continues the conversation: the original request, the result, and the user's follow-up instructions         | Planned |
-| Translate page      | Translates a page in batches (extension only)                                                               | Planned |
+| Use case            | What it does                                                                                                                            | Status  |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Translate selection | Translates the selection, using context when present                                                                                    | Done    |
+| Define in context   | For a word or short phrase: a dictionary entry with the meaning in this sentence when context exists, and the general senses either way | Done    |
+| Refine              | Continues the conversation: the original request, the result, and the user's follow-up instructions                                     | Planned |
+| Translate page      | Translates a page in batches (extension only)                                                                                           | Planned |
 
-Translate and define share one use case, `prepareLookup`, and differ only in the prompt. Chat-based refinement needs no separate mechanism: a lookup is the first turn of a conversation, and refining appends turns to it.
+Translate and define share one use case, `prepareLookup`. They differ in the prompt and in the answer: a translation is plain text, and a definition is a dictionary entry as JSON. Chat-based refinement needs no separate mechanism: a lookup is the first turn of a conversation, and refining appends turns to it.
 
 ### Context model
 
@@ -127,9 +129,21 @@ Settings and privacy:
 - The UI shows the context that was sent with each answer.
 - Password fields are never read.
 
+### Definitions as dictionary entries
+
+A definition is shown like an entry in a dictionary: headword and pronunciation, the meaning in the passage, then the senses under their parts of speech, each with an example. To lay that out, the answer has to be data, not prose.
+
+- **The format.** `spec/dictionary-entry.schema.json` is the JSON Schema of an entry. `DictionaryEntry` in `core` has the same shape. A value that does not apply is an empty string, never `null` or a missing field, which keeps the schema inside what every provider's strict mode accepts.
+- **Asking for it.** A define request carries `format: { name, schema }`. An adapter turns that into the provider's structured-output parameter, so the model is held to the schema. The system prompt also describes every field, because a model the adapter does not know gets no schema and has only the prompt to go on.
+- **Showing it while it streams.** The JSON arrives in pieces. `parsePartialJson` returns what the pieces describe so far: an open string with the text it has, an open array with its finished members. Field order in the schema is therefore display order: headword first, senses last.
+- **Falling back.** If the answer holds no JSON object, the card shows it as plain text. A model that ignores the format degrades the layout, never the answer.
+- **Grouping.** The UI makes one group per part of speech, in order of first appearance, and marks the sense that the model flagged as the one used in the passage.
+
+The parser is written for this project instead of taken from a library: `core` has no dependencies, and the Swift port has to implement the same behavior.
+
 ### Prompts as data
 
-System prompts live in `spec/prompts.json`, one per mode (`translate`, `define`) and per variant (`withContext`, `withoutContext`). Templates contain no conditionals; code picks the variant.
+System prompts live in `spec/prompts.json`, one per mode (`translate`, `define`) and per variant (`withContext`, `withoutContext`). The `define` prompts ask for the JSON entry described above. Templates contain no conditionals; code picks the variant.
 
 The user message is assembled by code:
 
@@ -186,15 +200,17 @@ What the Anthropic adapter does. A live run of `pnpm smoke` confirmed these agai
 - The client is created with `dangerouslyAllowBrowser`, which also makes the SDK send the `anthropic-dangerous-direct-browser-access` header the API requires from browser origins.
 - Requests stream through `messages.stream`. Only text deltas are passed on; thinking blocks are skipped.
 - `output_config.effort` is set to `low`, since lookups are simple and a fast first token matters. `thinking` and sampling parameters are not sent.
+- When a request has a `format`, its schema is sent as `output_config.format`, which holds the answer to it. This works together with streaming and with the fallback below.
 - A refused request (`stop_reason: "refusal"`) becomes an `LLMError` of kind `refusal`. On Opus 5.5 and Sonnet 5.5 the adapter also turns on server-side fallback (`fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta), so a declined request is retried on another model before it fails. Haiku 5.5 has no server-side fallback, so the parameter is not sent to it.
-- `effort` and `fallbacks` go only to models in the catalog. A model ID typed in by hand gets a plain request, because some models reject these parameters.
+- `effort`, `format`, and `fallbacks` go only to models in the catalog. A model ID typed in by hand gets a plain request, because some models reject these parameters.
 
 What the OpenAI adapter does, confirmed the same way:
 
 - The default model is `gpt-6.2-sol`. `gpt-6.2-astra` and `gpt-6-luna` are offered as alternatives.
 - Requests stream through the Responses API with `store: false`, so the user's text is not kept on OpenAI's side.
+- When a request has a `format`, its schema is sent as `text.format` with `strict: true`.
 
-Not done yet: prompt caching and structured outputs. Both matter for page translation, where many requests share a prefix and the output must map back to page segments. Prompt caching needs a shared prefix of at least 512 tokens on current Claude models, so the short lookup prompts would not benefit.
+Not done yet: prompt caching. It matters for page translation, where many requests share a prefix. It needs a shared prefix of at least 512 tokens on current Claude models, so the short lookup prompts would not benefit.
 
 There is no official Anthropic SDK for Swift, so the iOS port calls the HTTP API directly. The recorded streams in `spec/fixtures` are its test vectors.
 
@@ -215,22 +231,22 @@ How a lookup flows:
 3. The content script opens a port named `lingo:lookup` to the background and sends `{ type: "start", mode, context }`.
 4. `src/lookup-handler.ts` in the background validates the message, loads the settings and the key, calls `prepareLookup`, and streams from the provider.
 5. Events come back over the port: `started` (with the context that was actually sent), `delta` for each chunk, then `done` or `error`. A `ping` every 20 seconds keeps the service worker alive while the provider is silent, because Chrome stops a worker after 30 idle seconds.
-6. The panel renders the shared `LookupCard` from `@lingo/ui`. Closing the port, by closing the panel or leaving the page, cancels the request.
+6. The panel renders the shared `LookupCard` from `@lingo/ui`, which shows a translation as text and a definition as a dictionary entry. Closing the port, by closing the panel or leaving the page, cancels the request.
 
 Where things are in `apps/extension`:
 
-| Path                                          | Role                                                                                                      |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `entrypoints/background.ts`                   | Registers listeners: the lookup port, the shortcut, and opening settings                                  |
-| `entrypoints/lookup.content/`                 | Selection detection, the button, and the panel, mounted in a shadow root                                  |
-| `entrypoints/options/`                        | The settings page                                                                                         |
-| `src/messaging.ts`                            | The message types shared by content script and background, and their validation                           |
-| `src/lookup-handler.ts`                       | The background side of a lookup, written against a small port interface so it is tested without a browser |
-| `src/lookup-client.ts`, `src/lookup-state.ts` | The content-script side: opening the port, and folding events into panel state                            |
-| `src/context/dom.ts`                          | DOM context capture                                                                                       |
-| `src/stores.ts`                               | Settings and key storage                                                                                  |
-| `src/position.ts`                             | Where the button and the panel go                                                                         |
-| `e2e/`                                        | Playwright tests and the fake LLM server they run against                                                 |
+| Path                                          | Role                                                                                                                                   |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `entrypoints/background.ts`                   | Registers listeners: the lookup port, the shortcut, and opening settings                                                               |
+| `entrypoints/lookup.content/`                 | Selection detection, the button, and the panel, mounted in a shadow root                                                               |
+| `entrypoints/options/`                        | The settings page                                                                                                                      |
+| `src/messaging.ts`                            | The message types shared by content script and background, and their validation                                                        |
+| `src/lookup-handler.ts`                       | The background side of a lookup, written against a small port interface so it is tested without a browser                              |
+| `src/lookup-client.ts`, `src/lookup-state.ts` | The content-script side: opening the port, and folding events into panel state                                                         |
+| `src/context/dom.ts`                          | DOM context capture                                                                                                                    |
+| `src/stores.ts`                               | Settings and key storage                                                                                                               |
+| `src/position.ts`                             | Where the button and the panel go. The panel opens below the selection or above it, and its height is limited to the room on that side |
+| `e2e/`                                        | Playwright tests and the fake LLM server they run against                                                                              |
 
 Design points:
 
