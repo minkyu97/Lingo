@@ -1,6 +1,8 @@
-export type ProviderId = "anthropic" | "openai";
+import * as z from "zod/mini";
 
-export const PROVIDER_IDS: readonly ProviderId[] = ["anthropic", "openai"];
+export const PROVIDER_IDS = ["anthropic", "openai"] as const;
+
+export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export interface Settings {
   /** The provider lookups are sent to. */
@@ -41,6 +43,33 @@ export const TARGET_LANGUAGES: readonly string[] = [
   "uk",
 ];
 
+/** Text with something in it. Anything else reads as absent. */
+const optionalText = z.catch(
+  z.optional(z.string().check(z.trim(), z.minLength(1))),
+  undefined,
+);
+
+/**
+ * One optional piece of text per provider, such as a model ID or an API key.
+ * An entry that is missing, blank, or not text is left out.
+ */
+export const perProviderTextSchema = z.pipe(
+  z.object(
+    Object.fromEntries(PROVIDER_IDS.map((id) => [id, optionalText])) as Record<
+      ProviderId,
+      typeof optionalText
+    >,
+  ),
+  z.transform((entries: Record<ProviderId, string | undefined>) => {
+    const present: Partial<Record<ProviderId, string>> = {};
+    for (const id of PROVIDER_IDS) {
+      const value = entries[id];
+      if (value !== undefined) present[id] = value;
+    }
+    return present;
+  }),
+);
+
 /** Settings for a first run. The target language follows the given locale. */
 export function defaultSettings(locale?: string): Settings {
   return {
@@ -58,24 +87,27 @@ export function defaultSettings(locale?: string): Settings {
  * never breaks the app.
  */
 export function normalizeSettings(value: unknown, locale?: string): Settings {
+  // The schema is built per call, because the defaults depend on the locale.
   const defaults = defaultSettings(locale);
-  if (!isRecord(value)) return defaults;
+  const schema = z.catch(
+    z.object({
+      provider: z.catch(z.enum(PROVIDER_IDS), defaults.provider),
+      models: z.catch(perProviderTextSchema, {}),
+      targetLanguage: z.catch(
+        z.string().check(z.refine(isLanguageTag)),
+        defaults.targetLanguage,
+      ),
+      contextAwareness: z.catch(z.boolean(), defaults.contextAwareness),
+      maxContextChars: z.catch(
+        z.pipe(z.number(), z.transform(clampContextChars)),
+        defaults.maxContextChars,
+      ),
+    }),
+    defaults,
+  );
 
-  return {
-    provider: isProviderId(value.provider) ? value.provider : defaults.provider,
-    models: normalizeModels(value.models),
-    targetLanguage: isLanguageTag(value.targetLanguage)
-      ? value.targetLanguage
-      : defaults.targetLanguage,
-    contextAwareness:
-      typeof value.contextAwareness === "boolean"
-        ? value.contextAwareness
-        : defaults.contextAwareness,
-    maxContextChars: normalizeMaxContextChars(
-      value.maxContextChars,
-      defaults.maxContextChars,
-    ),
-  };
+  const settings: Settings = schema.parse(value);
+  return settings;
 }
 
 /** English name of a language tag, for use in prompts: "ko" becomes "Korean". */
@@ -102,37 +134,15 @@ function targetLanguageFor(locale: string | undefined): string {
   }
 }
 
-function normalizeModels(value: unknown): Settings["models"] {
-  const models: Settings["models"] = {};
-  if (!isRecord(value)) return models;
-  for (const id of PROVIDER_IDS) {
-    const model = value[id];
-    if (typeof model === "string" && model.trim() !== "") {
-      models[id] = model.trim();
-    }
-  }
-  return models;
-}
-
-function normalizeMaxContextChars(value: unknown, fallback: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+function clampContextChars(value: number): number {
   return Math.min(MAX_CONTEXT_CHARS_LIMIT, Math.max(0, Math.round(value)));
 }
 
-function isProviderId(value: unknown): value is ProviderId {
-  return PROVIDER_IDS.includes(value as ProviderId);
-}
-
-function isLanguageTag(value: unknown): value is string {
-  if (typeof value !== "string" || value === "") return false;
+function isLanguageTag(value: string): boolean {
   try {
     new Intl.Locale(value);
     return true;
   } catch {
     return false;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

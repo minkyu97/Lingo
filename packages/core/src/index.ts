@@ -47,6 +47,7 @@ export {
   normalizeSettings,
   PROVIDER_IDS,
   type ProviderId,
+  perProviderTextSchema,
   type Settings,
   TARGET_LANGUAGES,
 } from "./settings.ts";

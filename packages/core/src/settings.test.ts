@@ -4,6 +4,7 @@ import {
   languageName,
   MAX_CONTEXT_CHARS_LIMIT,
   normalizeSettings,
+  perProviderTextSchema,
   TARGET_LANGUAGES,
 } from "./settings.ts";
 
@@ -86,5 +87,24 @@ describe("languageName", () => {
 
   it("returns the input when it cannot be named", () => {
     expect(languageName("not a tag")).toBe("not a tag");
+  });
+});
+
+describe("perProviderTextSchema", () => {
+  it("keeps trimmed text per provider and leaves out everything else", () => {
+    const parsed = perProviderTextSchema.parse({
+      anthropic: "  key-a  ",
+      openai: "   ",
+      other: "x",
+    });
+    expect(parsed).toEqual({ anthropic: "key-a" });
+    expect(Object.keys(parsed)).toEqual(["anthropic"]);
+    expect(Object.keys(perProviderTextSchema.parse({ openai: 5 }))).toEqual([]);
+  });
+
+  it("does not accept a value that is not an object", () => {
+    for (const value of [undefined, null, "x", 3, []]) {
+      expect(perProviderTextSchema.safeParse(value).success).toBe(false);
+    }
   });
 });
