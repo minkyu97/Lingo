@@ -6,6 +6,15 @@ export {
   withoutContext,
 } from "./context.ts";
 export {
+  type DictionaryEntry,
+  type DictionarySense,
+  dictionaryEntryToText,
+  groupSenses,
+  hasDictionaryContent,
+  parseDictionaryEntry,
+  type SenseGroup,
+} from "./dictionary.ts";
+export {
   type ChatMessage,
   type ChatRequest,
   type ChatRole,
