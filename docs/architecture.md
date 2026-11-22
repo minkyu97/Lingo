@@ -11,19 +11,20 @@ Background research:
 
 ## Decisions at a glance
 
-| Topic              | Decision                                                                                                         |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| Repository         | One repo for all surfaces, organized as a pnpm workspace                                                         |
-| Toolchain          | Node and pnpm versions are pinned in `mise.toml`. Local setup and CI both install from it                        |
-| Lint and format    | Biome with its recommended rules, for every language it supports                                                 |
-| Tests              | Vitest for unit tests. Playwright for end-to-end tests of the extension                                          |
-| Browser extension  | WXT + React + TypeScript; Chrome MV3 first, Safari from the same code. Requires Chrome 140 or later              |
-| Desktop            | Tauri 2 for macOS and Windows, sharing the React UI and TypeScript core. Electron is the fallback                |
-| iOS / iPadOS       | Native SwiftUI app with a default-translation extension and a Safari Web Extension                               |
-| Shared logic       | TypeScript packages for extension and desktop; a thin Swift port for iOS; shared prompts and fixtures in `spec/` |
-| LLM access         | Bring your own key. The app calls provider APIs directly; there is no Lingo server                               |
-| macOS distribution | Developer ID + notarization, outside the Mac App Store                                                           |
-| Build order        | Extension → desktop spike → desktop → iOS                                                                        |
+| Topic              | Decision                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Repository         | One repo for all surfaces, organized as a pnpm workspace                                                           |
+| Toolchain          | Node and pnpm versions are pinned in `mise.toml`. Local setup and CI both install from it                          |
+| Lint and format    | Biome with its recommended rules, for every language it supports                                                   |
+| Tests              | Vitest for unit tests. Playwright for end-to-end tests of the extension                                            |
+| Validation         | Zod schemas, written with `zod/mini`, wherever untyped data becomes typed: messages, stored data, and model output |
+| Browser extension  | WXT + React + TypeScript; Chrome MV3 first, Safari from the same code. Requires Chrome 140 or later                |
+| Desktop            | Tauri 2 for macOS and Windows, sharing the React UI and TypeScript core. Electron is the fallback                  |
+| iOS / iPadOS       | Native SwiftUI app with a default-translation extension and a Safari Web Extension                                 |
+| Shared logic       | TypeScript packages for extension and desktop; a thin Swift port for iOS; shared prompts and fixtures in `spec/`   |
+| LLM access         | Bring your own key. The app calls provider APIs directly; there is no Lingo server                                 |
+| macOS distribution | Developer ID + notarization, outside the Mac App Store                                                             |
+| Build order        | Extension → desktop spike → desktop → iOS                                                                          |
 
 ## Repository layout
 
@@ -47,17 +48,17 @@ Releases are tagged per surface: `ext-v*`, `desktop-v*`, `ios-v*`.
 
 ## Hexagonal core
 
-`packages/core` holds the domain and defines the ports. It depends only on `@lingo/spec`, which is data. Its `tsconfig.json` leaves the DOM library out, so page and browser APIs do not type-check there.
+`packages/core` holds the domain and defines the ports. It has no platform or provider code: its only dependencies are `@lingo/spec`, which is data, and Zod, for validation. Its `tsconfig.json` leaves the DOM library out, so page and browser APIs do not type-check there.
 
 | Module            | What it holds                                                                                                             |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `context.ts`      | `CapturedContext` and `ContextLevel`; `clampContext` and `withoutContext`                                                 |
 | `llm.ts`          | The `LLMProvider` port, `ChatRequest` with its optional JSON `format`, and `LLMError` with its kinds                      |
 | `prompt.ts`       | `buildLookupRequest`: a system prompt from `spec/prompts.json` plus the user message, and the JSON format for definitions |
-| `dictionary.ts`   | `DictionaryEntry`, `parseDictionaryEntry` for a complete or still-streaming answer, and sense grouping                    |
+| `dictionary.ts`   | `DictionaryEntry` and its schema, `parseDictionaryEntry` for a complete or still-streaming answer, and sense grouping     |
 | `partial-json.ts` | `parsePartialJson`: reads as much of a JSON document as has arrived so far                                                |
 | `mode.ts`         | `chooseMode`: define a word or short phrase, translate anything longer                                                    |
-| `settings.ts`     | `Settings`, its defaults, `normalizeSettings`, and the offered target languages                                           |
+| `settings.ts`     | `Settings`, its defaults, `normalizeSettings` with its schema, and the offered target languages                           |
 | `lookup.ts`       | `prepareLookup`: the use case that applies the settings to a captured context and builds the request                      |
 
 Each app supplies the adapters:
@@ -103,6 +104,25 @@ type LLMErrorKind =
 
 Adapters turn every provider failure into an `LLMError` with one of those kinds, so a UI can react without knowing any SDK.
 
+### Validation
+
+Data that arrives without a trustworthy type goes through a Zod schema, and the TypeScript type is inferred from that schema where the schema defines the shape. This keeps a type and its check from drifting apart.
+
+| Data                           | Schema                            | On bad input                                                        |
+| ------------------------------ | --------------------------------- | ------------------------------------------------------------------- |
+| Messages from a content script | `apps/extension/src/messaging.ts` | The message is rejected. Optional fields that are wrong are dropped |
+| Stored settings                | `normalizeSettings` in `core`     | Each wrong field falls back to its default                          |
+| Stored API keys and model IDs  | `perProviderTextSchema` in `core` | Wrong entries are left out                                          |
+| A model's dictionary entry     | `packages/core/src/dictionary.ts` | Each missing or wrong field reads as empty                          |
+
+Schemas are written with `zod/mini`, the tree-shakable form of Zod. The content script is injected into every frame of every page, and the regular `zod` entry point added 83 kB to it where `zod/mini` adds 23 kB.
+
+Not everything typed `unknown` needs a schema:
+
+- `parsePartialJson` is a parser. Its result is what the dictionary schema checks.
+- The adapters classify a thrown error by the SDK's error classes, which is not a question of shape.
+- Events from the background to a content script are typed but not checked, because the sender is the extension itself.
+
 ### Use cases
 
 | Use case            | What it does                                                                                                                            | Status  |
@@ -139,7 +159,7 @@ A definition is shown like an entry in a dictionary: headword and pronunciation,
 - **Falling back.** If the answer holds no JSON object, the card shows it as plain text. A model that ignores the format degrades the layout, never the answer.
 - **Grouping.** The UI makes one group per part of speech, in order of first appearance, and marks the sense that the model flagged as the one used in the passage.
 
-The parser is written for this project instead of taken from a library: `core` has no dependencies, and the Swift port has to implement the same behavior.
+`parsePartialJson` is written for this project. What it returns for an unfinished value is chosen for what the card draws, and the Swift port has to implement the same behavior. Its result then goes through the entry's Zod schema, which fills in every field that has not arrived or is not the right type.
 
 ### Prompts as data
 
@@ -177,7 +197,7 @@ Extension rules, as implemented:
 
 - Content scripts never hold the key and never read storage. They send the selection and context to the background over a port.
 - On startup the background calls `storage.local.setAccessLevel("TRUSTED_CONTEXTS")`, so only the background and the extension's own pages can read storage. Chrome applies this to `storage.local` from version 140, which is why the manifest sets `minimum_chrome_version` to 140 ([Chrome](https://developer.chrome.com/docs/extensions/reference/api/storage)).
-- The background validates every message from a content script before using it, and chooses the provider URL itself.
+- The background validates every message from a content script with a Zod schema before using it, and chooses the provider URL itself.
 - Keys are stored in `storage.local`, never in synced storage.
 
 Desktop open decision: either the webview calls providers through the shared TypeScript adapters, fetching the key from the Rust side at call time, or a Rust command proxies the HTTP request and injects the key so it never enters JavaScript. The first shares more code; the second keeps the key further from the UI layer.

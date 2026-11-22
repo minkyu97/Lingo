@@ -88,6 +88,7 @@ Formatting and linting are automated. Run the tools instead of formatting by han
 - In documents, mark any claim that was not confirmed from a source as `[inferred]`.
 - `packages/core` imports no platform API and no provider SDK. Platform and provider code lives in adapters.
 - API keys never appear in content scripts, logs, test fixtures, or commits.
+- Data that arrives without a trustworthy type (a message from another context, stored data, model output) becomes typed through a Zod schema, written with `zod/mini`. Infer the type from the schema instead of declaring it a second time. See [Validation](docs/architecture.md#validation).
 
 ## Git workflow
 
