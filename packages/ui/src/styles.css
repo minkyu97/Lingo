@@ -1,0 +1,188 @@
+/*
+ * Styles for the shared Lingo components.
+ *
+ * Sizes are in px on purpose. These components also render inside web pages,
+ * where rem would follow the page's root font size.
+ */
+
+.lingo-card {
+  --lingo-bg: #ffffff;
+  --lingo-fg: #1f2328;
+  --lingo-muted: #656d76;
+  --lingo-border: #d0d7de;
+  --lingo-subtle: #f6f8fa;
+  --lingo-accent: #0969da;
+  --lingo-danger: #cf222e;
+
+  box-sizing: border-box;
+  width: 360px;
+  max-width: calc(100vw - 16px);
+  border: 1px solid var(--lingo-border);
+  border-radius: 10px;
+  background: var(--lingo-bg);
+  color: var(--lingo-fg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+  font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+@media (prefers-color-scheme: dark) {
+  .lingo-card {
+    --lingo-bg: #1f2328;
+    --lingo-fg: #e6edf3;
+    --lingo-muted: #9198a1;
+    --lingo-border: #3d444d;
+    --lingo-subtle: #2a3037;
+    --lingo-accent: #4493f8;
+    --lingo-danger: #f85149;
+  }
+}
+
+.lingo-card *,
+.lingo-card *::before,
+.lingo-card *::after {
+  box-sizing: border-box;
+}
+
+.lingo-card p {
+  margin: 0;
+}
+
+.lingo-card button {
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.lingo-card button:focus-visible {
+  outline: 2px solid var(--lingo-accent);
+  outline-offset: 1px;
+}
+
+.lingo-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 8px 10px;
+  border-bottom: 1px solid var(--lingo-border);
+}
+
+.lingo-card__modes {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--lingo-subtle);
+}
+
+.lingo-card .lingo-card__mode {
+  padding: 2px 10px;
+  border-radius: 5px;
+  color: var(--lingo-muted);
+  font-size: 13px;
+}
+
+.lingo-card .lingo-card__mode[aria-pressed="true"] {
+  background: var(--lingo-bg);
+  color: var(--lingo-fg);
+  box-shadow: 0 0 0 1px var(--lingo-border);
+}
+
+.lingo-card .lingo-card__icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  color: var(--lingo-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.lingo-card .lingo-card__icon:hover {
+  background: var(--lingo-subtle);
+}
+
+.lingo-card__body {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.lingo-card__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lingo-card__text[data-streaming="true"]::after {
+  content: "▍";
+  margin-left: 1px;
+  color: var(--lingo-muted);
+  animation: lingo-blink 1s steps(2, start) infinite;
+}
+
+@keyframes lingo-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.lingo-card__placeholder,
+.lingo-card__muted {
+  color: var(--lingo-muted);
+}
+
+.lingo-card__error p {
+  color: var(--lingo-danger);
+  overflow-wrap: anywhere;
+}
+
+.lingo-card .lingo-card__action {
+  margin-top: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--lingo-border);
+  border-radius: 6px;
+  background: var(--lingo-subtle);
+  font-size: 13px;
+}
+
+.lingo-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--lingo-border);
+  font-size: 12px;
+}
+
+.lingo-card .lingo-card__link {
+  padding: 2px 0;
+  color: var(--lingo-accent);
+  font-size: 12px;
+}
+
+.lingo-card .lingo-card__link:hover {
+  text-decoration: underline;
+}
+
+.lingo-card__context {
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--lingo-border);
+  background: var(--lingo-subtle);
+  border-radius: 0 0 10px 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.lingo-card__context mark {
+  border-radius: 2px;
+  background: rgb(255 212 0 / 0.4);
+  color: inherit;
+}
