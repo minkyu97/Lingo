@@ -10,7 +10,14 @@
  * or in `.env.local` at the repo root. A provider without a key is skipped.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { PROVIDER_IDS, type ProviderId, prepareLookup } from "@lingo/core";
+import {
+  type CapturedContext,
+  type ChatRequest,
+  PROVIDER_IDS,
+  type ProviderId,
+  parseDictionaryEntry,
+  prepareLookup,
+} from "@lingo/core";
 import OpenAI from "openai";
 import { createProvider, PROVIDERS } from "../src/index.ts";
 
@@ -28,16 +35,20 @@ const STREAMED_MODELS: Record<ProviderId, string[]> = {
   openai: ["gpt-6.2-sol", "gpt-6-luna"],
 };
 
-const { request } = prepareLookup(
-  "translate",
-  {
-    selection: "bank",
-    level: "paragraph",
-    before: "She sat on the river ",
-    after: " and watched the boats.",
-  },
-  { targetLanguage: "ko", contextAwareness: true, maxContextChars: 1000 },
-);
+const captured: CapturedContext = {
+  selection: "bank",
+  level: "paragraph",
+  before: "She sat on the river ",
+  after: " and watched the boats.",
+};
+const settings = {
+  targetLanguage: "ko",
+  contextAwareness: true,
+  maxContextChars: 1000,
+};
+const translate = prepareLookup("translate", captured, settings).request;
+/** Asks for a dictionary entry as JSON held to a schema. */
+const define = prepareLookup("define", captured, settings).request;
 
 /** Sends requests the way the extension's service worker does: with an Origin. */
 const fetchWithOrigin: typeof fetch = (input, init) => {
@@ -66,11 +77,17 @@ async function modelExists(
   }
 }
 
-async function streamOnce(
+interface Streamed {
+  text: string;
+  timing: string;
+}
+
+async function stream(
   provider: ProviderId,
   apiKey: string,
   model: string,
-): Promise<void> {
+  request: ChatRequest,
+): Promise<Streamed> {
   const started = performance.now();
   let firstChunkAt: number | undefined;
   let text = "";
@@ -88,9 +105,50 @@ async function streamOnce(
 
   const firstMs = Math.round((firstChunkAt ?? started) - started);
   const totalMs = Math.round(performance.now() - started);
+  return { text, timing: `first chunk ${firstMs} ms, total ${totalMs} ms` };
+}
+
+async function translateOnce(
+  provider: ProviderId,
+  apiKey: string,
+  model: string,
+): Promise<void> {
+  const { text, timing } = await stream(provider, apiKey, model, translate);
   console.log(
-    `  ok    ${model}: ${JSON.stringify(text)} (first chunk ${firstMs} ms, total ${totalMs} ms)`,
+    `  ok    ${model} translate: ${JSON.stringify(text)} (${timing})`,
   );
+}
+
+/** A definition must come back as a complete dictionary entry. */
+async function defineOnce(
+  provider: ProviderId,
+  apiKey: string,
+  model: string,
+): Promise<void> {
+  const { text, timing } = await stream(provider, apiKey, model, define);
+  JSON.parse(text);
+  const entry = parseDictionaryEntry(text);
+  if (!entry?.headword) throw new Error(`no headword in ${text}`);
+  if (!entry.contextMeaning) throw new Error(`no context meaning in ${text}`);
+  const complete = entry.senses.filter(
+    (sense) => sense.partOfSpeech && sense.meaning && sense.example,
+  );
+  if (complete.length === 0 || complete.length !== entry.senses.length) {
+    throw new Error(`incomplete senses in ${text}`);
+  }
+  if (!entry.senses.some((sense) => sense.inContext)) {
+    throw new Error(`no sense is marked as the one in context in ${text}`);
+  }
+
+  console.log(`  ok    ${model} define (${timing}):`);
+  console.log(`          ${entry.headword} ${entry.pronunciation}`);
+  console.log(`          in context: ${entry.contextMeaning}`);
+  for (const sense of entry.senses) {
+    const mark = sense.inContext ? " *" : "";
+    console.log(
+      `          [${sense.partOfSpeech}] ${sense.meaning}${mark} | ${sense.example} / ${sense.exampleTranslation}`,
+    );
+  }
 }
 
 for (const provider of PROVIDER_IDS) {
@@ -112,9 +170,14 @@ for (const provider of PROVIDER_IDS) {
 
   for (const model of STREAMED_MODELS[provider]) {
     try {
-      await streamOnce(provider, apiKey, model);
+      await translateOnce(provider, apiKey, model);
     } catch (error) {
-      fail(`stream ${model}`, error);
+      fail(`translate with ${model}`, error);
+    }
+    try {
+      await defineOnce(provider, apiKey, model);
+    } catch (error) {
+      fail(`define with ${model}`, error);
     }
   }
 }
