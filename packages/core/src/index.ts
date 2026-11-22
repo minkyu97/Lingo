@@ -20,6 +20,7 @@ export {
   prepareLookup,
 } from "./lookup.ts";
 export { chooseMode } from "./mode.ts";
+export { parsePartialJson } from "./partial-json.ts";
 export {
   buildLookupRequest,
   type LookupInput,
