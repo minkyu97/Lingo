@@ -26,6 +26,9 @@ export type LookupEvent =
   | { type: "done" }
   | { type: "error"; kind: LLMErrorKind; message: string };
 
+/** Name of the keyboard command declared in the manifest. */
+export const LOOKUP_COMMAND = "lookup-selection";
+
 /** One-off messages sent with `runtime.sendMessage` or `tabs.sendMessage`. */
 export type RuntimeMessage =
   /** Content script to background. */

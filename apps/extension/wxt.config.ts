@@ -15,5 +15,11 @@ export default defineConfig({
       "https://api.anthropic.com/*",
       "https://api.openai.com/*",
     ],
+    commands: {
+      "lookup-selection": {
+        suggested_key: { default: "Alt+Shift+L" },
+        description: "Translate or define the selected text",
+      },
+    },
   },
 });

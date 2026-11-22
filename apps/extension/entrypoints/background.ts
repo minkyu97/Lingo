@@ -3,7 +3,12 @@ import { createProvider } from "@lingo/providers";
 import { browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
 import { handleLookupPort } from "../src/lookup-handler.ts";
-import { isRuntimeMessage, LOOKUP_PORT } from "../src/messaging.ts";
+import {
+  isRuntimeMessage,
+  LOOKUP_COMMAND,
+  LOOKUP_PORT,
+  type RuntimeMessage,
+} from "../src/messaging.ts";
 import {
   loadApiKey,
   loadSettings,
@@ -41,6 +46,16 @@ export default defineBackground(() => {
     if (isRuntimeMessage(message) && message.type === "open-settings") {
       void browser.runtime.openOptionsPage();
     }
+  });
+
+  // The shortcut is handled here, and the selection lives in the page, so
+  // ask the tab's content scripts to look it up.
+  browser.commands.onCommand.addListener((command, tab) => {
+    if (command !== LOOKUP_COMMAND || tab?.id === undefined) return;
+    const message: RuntimeMessage = { type: "lookup-selection" };
+    browser.tabs.sendMessage(tab.id, message).catch(() => {
+      // No content script runs on this page, such as a browser settings page.
+    });
   });
 
   // A new install has no API key yet, so start on the settings page.

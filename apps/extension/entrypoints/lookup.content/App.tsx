@@ -10,6 +10,7 @@ import {
   type LookupState,
 } from "../../src/lookup-state.ts";
 import {
+  isRuntimeMessage,
   MAX_SELECTION_CHARS,
   type RuntimeMessage,
 } from "../../src/messaging.ts";
@@ -27,6 +28,21 @@ interface Panel {
 
 function viewport() {
   return { width: window.innerWidth, height: window.innerHeight };
+}
+
+/** Just below the selection, or below the focused field when the selection has no box. */
+function selectionAnchor(): Point {
+  const selection = document.getSelection();
+  const range =
+    selection && selection.rangeCount > 0
+      ? selection.getRangeAt(0).getBoundingClientRect()
+      : undefined;
+  const box =
+    range && (range.width > 0 || range.height > 0)
+      ? range
+      : document.activeElement?.getBoundingClientRect();
+  if (!box) return { x: window.innerWidth / 2, y: 80 };
+  return { x: box.left, y: box.bottom + 8 };
 }
 
 /**
@@ -107,6 +123,21 @@ export function LookupApp({ host }: { host: Element }) {
       cancelLookup.current();
     };
   }, [host, close]);
+
+  // The keyboard shortcut arrives from the background. Every frame gets the
+  // message, and only the one that holds the selection answers.
+  useEffect(() => {
+    const onMessage = (message: unknown) => {
+      if (!isRuntimeMessage(message) || message.type !== "lookup-selection") {
+        return;
+      }
+      const captured = captureContext();
+      if (!captured || captured.selection.length > MAX_SELECTION_CHARS) return;
+      run(captured, chooseMode(captured.selection), selectionAnchor());
+    };
+    browser.runtime.onMessage.addListener(onMessage);
+    return () => browser.runtime.onMessage.removeListener(onMessage);
+  }, [run]);
 
   const openSettings = () => {
     const message: RuntimeMessage = { type: "open-settings" };

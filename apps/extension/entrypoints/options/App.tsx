@@ -200,6 +200,12 @@ export function OptionsApp() {
           </label>
         </fieldset>
 
+        <p className="hint">
+          Select text on any page and press the Lingo button that appears, or
+          use the keyboard shortcut (Alt+Shift+L by default). You can change the
+          shortcut at chrome://extensions/shortcuts.
+        </p>
+
         <div className="actions">
           <button type="submit">Save</button>
           <output>{saved ? "Saved" : ""}</output>
