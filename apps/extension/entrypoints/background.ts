@@ -1,5 +1,50 @@
+import type { ProviderId } from "@lingo/core";
+import { createProvider } from "@lingo/providers";
+import { browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
+import { handleLookupPort } from "../src/lookup-handler.ts";
+import { isRuntimeMessage, LOOKUP_PORT } from "../src/messaging.ts";
+import {
+  loadApiKey,
+  loadSettings,
+  restrictStorageToTrustedContexts,
+} from "../src/stores.ts";
+
+/**
+ * Set only in end-to-end test builds, where it points the adapters at a local
+ * fake server. Production builds leave it undefined and call the real APIs.
+ */
+const E2E_BASE_URL: string | undefined = import.meta.env.WXT_E2E_LLM_BASE_URL;
+
+function baseURL(provider: ProviderId): string | undefined {
+  if (!E2E_BASE_URL) return undefined;
+  // The OpenAI SDK expects the version segment in its base URL.
+  return provider === "openai" ? `${E2E_BASE_URL}/v1` : E2E_BASE_URL;
+}
 
 export default defineBackground(() => {
-  // Listeners are registered here as features land.
+  void restrictStorageToTrustedContexts();
+
+  // API keys are read and provider calls are made here only, never in a
+  // content script.
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name !== LOOKUP_PORT) return;
+    handleLookupPort(port, {
+      loadSettings,
+      loadApiKey,
+      createProvider,
+      baseURL,
+    });
+  });
+
+  browser.runtime.onMessage.addListener((message) => {
+    if (isRuntimeMessage(message) && message.type === "open-settings") {
+      void browser.runtime.openOptionsPage();
+    }
+  });
+
+  // A new install has no API key yet, so start on the settings page.
+  browser.runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === "install") void browser.runtime.openOptionsPage();
+  });
 });
