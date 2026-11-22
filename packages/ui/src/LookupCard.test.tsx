@@ -91,6 +91,80 @@ describe("LookupCard", () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
+  describe("in define mode", () => {
+    const entry = {
+      headword: "bank",
+      pronunciation: "/bæŋk/",
+      contextMeaning: "강둑을 뜻한다.",
+      senses: [
+        {
+          partOfSpeech: "명사",
+          meaning: "강둑, 제방",
+          inContext: true,
+          example: "the river bank",
+          exampleTranslation: "강둑",
+        },
+      ],
+    };
+    const json = JSON.stringify(entry);
+
+    it("lays the answer out as a dictionary entry", () => {
+      renderCard({ mode: "define", text: json });
+      expect(screen.getByText("bank")).toBeDefined();
+      expect(screen.getByText("In this context")).toBeDefined();
+      expect(screen.getByRole("heading", { name: "명사" })).toBeDefined();
+      expect(screen.queryByText(/"headword"/)).toBeNull();
+    });
+
+    it("shows the entry while it is still streaming", () => {
+      renderCard({
+        mode: "define",
+        status: "streaming",
+        text: '{"headword":"ba',
+      });
+      expect(screen.getByText("ba")).toBeDefined();
+      expect(screen.queryByText("Thinking…")).toBeNull();
+    });
+
+    it("keeps the placeholder until the JSON holds something to show", () => {
+      for (const text of ["{", '{"headword":"', "```json\n{"]) {
+        renderCard({ mode: "define", status: "streaming", text });
+        expect(screen.getByText("Thinking…")).toBeDefined();
+        cleanup();
+      }
+    });
+
+    it("falls back to plain text when the model ignored the format", () => {
+      renderCard({ mode: "define", text: "bank: 강둑 또는 은행" });
+      expect(screen.getByText("bank: 강둑 또는 은행")).toBeDefined();
+    });
+
+    it("copies the entry as readable text", async () => {
+      const writeText = vi.fn(async () => {});
+      vi.stubGlobal("navigator", { clipboard: { writeText } });
+      renderCard({ mode: "define", text: json });
+
+      fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+      expect(writeText).toHaveBeenCalledWith(
+        [
+          "bank /bæŋk/",
+          "In this context: 강둑을 뜻한다.",
+          "",
+          "명사",
+          "1. 강둑, 제방",
+          "   the river bank / 강둑",
+        ].join("\n"),
+      );
+      await screen.findByRole("button", { name: "Copied" });
+      vi.unstubAllGlobals();
+    });
+  });
+
+  it("shows a translation as plain text even when it looks like JSON", () => {
+    renderCard({ mode: "translate", text: '{"headword":"bank"}' });
+    expect(screen.getByText('{"headword":"bank"}')).toBeDefined();
+  });
+
   it("closes", () => {
     const onClose = vi.fn();
     renderCard({ onClose });

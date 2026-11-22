@@ -1,17 +1,24 @@
-import type {
-  CapturedContext,
-  ContextLevel,
-  LLMErrorKind,
-  LookupMode,
+import {
+  type CapturedContext,
+  type ContextLevel,
+  dictionaryEntryToText,
+  hasDictionaryContent,
+  type LLMErrorKind,
+  type LookupMode,
+  parseDictionaryEntry,
 } from "@lingo/core";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { DictionaryEntryView } from "./DictionaryEntryView.tsx";
 
 export type LookupStatus = "loading" | "streaming" | "done" | "error";
 
 export interface LookupCardProps {
   mode: LookupMode;
   status: LookupStatus;
-  /** The answer so far. Grows while the status is `streaming`. */
+  /**
+   * The answer so far. Grows while the status is `streaming`. A translation
+   * is plain text; a definition is a dictionary entry as JSON.
+   */
   text: string;
   /** The context that was sent with the request, once known. */
   context?: CapturedContext;
@@ -45,16 +52,34 @@ const ERROR_MESSAGES: Partial<Record<LLMErrorKind, string>> = {
 
 const SETTINGS_ERRORS: readonly LLMErrorKind[] = ["missing_key", "auth"];
 
+/** The start of a JSON answer, possibly inside a Markdown code fence. */
+const JSON_START = /^\s*(`|\{)/;
+
 /** Shows one lookup: the streaming answer, its mode, and what was sent. */
 export function LookupCard(props: LookupCardProps) {
   const { mode, status, text, context, error } = props;
   const [showContext, setShowContext] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // A definition arrives as JSON. A model that ignored the format leaves
+  // `entry` undefined, and its answer is shown as plain text instead.
+  const entry = useMemo(
+    () => (mode === "define" ? parseDictionaryEntry(text) : undefined),
+    [mode, text],
+  );
+  const showEntry = entry !== undefined && hasDictionaryContent(entry);
+  // JSON has started to arrive but holds nothing to show yet.
+  const awaitingEntry =
+    mode === "define" &&
+    status === "streaming" &&
+    !showEntry &&
+    JSON_START.test(text);
+
   const hasContext = context !== undefined && context.level !== "none";
 
   async function copy() {
-    await navigator.clipboard.writeText(text);
+    const copyable = showEntry ? dictionaryEntryToText(entry) : text;
+    await navigator.clipboard.writeText(copyable);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
@@ -107,8 +132,13 @@ export function LookupCard(props: LookupCardProps) {
               </button>
             )}
           </div>
-        ) : status === "loading" ? (
+        ) : status === "loading" || awaitingEntry ? (
           <p className="lingo-card__placeholder">Thinking…</p>
+        ) : showEntry ? (
+          <DictionaryEntryView
+            entry={entry}
+            streaming={status === "streaming"}
+          />
         ) : (
           <p
             className="lingo-card__text"
