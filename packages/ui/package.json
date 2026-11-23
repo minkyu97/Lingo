@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./lookup.css": "./src/styles/lookup.css"
+    "./lookup.css": "./src/styles/lookup.css",
+    "./settings.css": "./src/styles/settings.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

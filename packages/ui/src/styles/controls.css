@@ -224,9 +224,157 @@
   color: var(--lingo-danger);
 }
 
+/* Link: an anchor, or a button that reads as one. */
+
+.lingo-link {
+  color: var(--lingo-accent);
+  font: inherit;
+  text-decoration: none;
+}
+
+.lingo-link:hover {
+  text-decoration: underline;
+}
+
+/* Text field */
+
+.lingo-text-field {
+  display: flex;
+  align-items: center;
+  gap: var(--lingo-space-4);
+  height: 36px;
+  /* The trailing control brings the rest of the 8px at the right end. */
+  padding: 0 var(--lingo-space-4) 0 var(--lingo-space-12);
+  border: 1px solid var(--lingo-border);
+  border-radius: var(--lingo-radius-sm);
+  background: var(--lingo-bg);
+}
+
+.lingo-text-field:focus-within {
+  border-color: var(--lingo-accent);
+}
+
+.lingo-text-field[data-invalid="true"] {
+  border-color: var(--lingo-danger);
+}
+
+.lingo-text-field[data-busy="true"] {
+  border-color: var(--lingo-border);
+  background: var(--lingo-subtle);
+}
+
+.lingo-text-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--lingo-fg);
+  font: var(--lingo-text-body);
+  /* The field shows the focus on its border. */
+  outline: none;
+}
+
+.lingo-text-field input:disabled {
+  color: var(--lingo-muted);
+}
+
+.lingo-text-field input::placeholder {
+  color: var(--lingo-muted);
+}
+
+.lingo-text-field .lingo-icon-button,
+.lingo-text-field__spinner {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.lingo-text-field__spinner {
+  color: var(--lingo-muted);
+  animation: lingo-spin 0.8s linear infinite;
+}
+
+@keyframes lingo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Search field */
+
+.lingo-search-field {
+  display: flex;
+  align-items: center;
+  gap: var(--lingo-space-8);
+  height: 36px;
+  padding: 0 var(--lingo-space-12);
+  border-radius: var(--lingo-radius-sm);
+  background: var(--lingo-subtle);
+  color: var(--lingo-muted);
+}
+
+.lingo-search-field:focus-within {
+  outline: 2px solid var(--lingo-accent);
+  outline-offset: -1px;
+}
+
+.lingo-search-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--lingo-fg);
+  font: var(--lingo-text-body);
+  outline: none;
+}
+
+.lingo-search-field input::placeholder {
+  color: var(--lingo-muted);
+}
+
+/* The browser's own clear button would be a second, unstyled control. */
+.lingo-search-field input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* Field message */
+
+.lingo-field-message {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lingo-space-2) var(--lingo-space-4);
+  min-height: 16px;
+  font: var(--lingo-text-caption);
+}
+
+.lingo-field-message--neutral {
+  color: var(--lingo-muted);
+}
+
+.lingo-field-message--success .lingo-icon {
+  color: var(--lingo-success);
+}
+
+.lingo-field-message--danger .lingo-icon {
+  color: var(--lingo-danger);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lingo-switch,
   .lingo-switch::after {
     transition: none;
+  }
+
+  /* A spinner that turns slowly still reads as waiting. */
+  .lingo-text-field__spinner {
+    animation-duration: 3s;
   }
 }
