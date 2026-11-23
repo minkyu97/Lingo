@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONTEXT_CHAR_PRESETS,
   defaultSettings,
   languageName,
   MAX_CONTEXT_CHARS_LIMIT,
+  nativeLanguageName,
   normalizeSettings,
   perProviderTextSchema,
   TARGET_LANGUAGES,
@@ -87,6 +89,35 @@ describe("languageName", () => {
 
   it("returns the input when it cannot be named", () => {
     expect(languageName("not a tag")).toBe("not a tag");
+  });
+});
+
+describe("nativeLanguageName", () => {
+  it("gives the name a language has for itself", () => {
+    expect(nativeLanguageName("ko")).toBe("한국어");
+    expect(nativeLanguageName("zh-Hant")).toBe("繁體中文");
+  });
+
+  it("capitalizes names that are written in lower case", () => {
+    expect(nativeLanguageName("es")).toBe("Español");
+    expect(nativeLanguageName("uk")).toBe("Українська");
+  });
+
+  it("names every offered target language", () => {
+    for (const tag of TARGET_LANGUAGES) {
+      expect(nativeLanguageName(tag)).not.toBe(tag);
+    }
+  });
+
+  it("returns the input when it cannot be named", () => {
+    expect(nativeLanguageName("not a tag")).toBe("not a tag");
+  });
+});
+
+describe("CONTEXT_CHAR_PRESETS", () => {
+  it("offers the default, and nothing above the limit", () => {
+    expect(CONTEXT_CHAR_PRESETS).toContain(defaultSettings().maxContextChars);
+    expect(Math.max(...CONTEXT_CHAR_PRESETS)).toBe(MAX_CONTEXT_CHARS_LIMIT);
   });
 });
 
