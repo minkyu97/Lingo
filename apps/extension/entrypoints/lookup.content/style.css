@@ -1,39 +1,9 @@
 @import "@lingo/ui/lookup.css";
 
-/*
- * Both elements are pinned to the viewport and sit above the page. Sizes are
- * in px because rem would follow the host page's root font size.
- */
+/* Both elements are pinned to the viewport and sit above the page. */
 
 .lingo-trigger,
 .lingo-panel {
   position: fixed;
   z-index: 2147483647;
-}
-
-.lingo-trigger {
-  box-sizing: border-box;
-  width: 28px;
-  height: 28px;
-  margin: 0;
-  padding: 0;
-  border: 1px solid rgb(255 255 255 / 0.7);
-  border-radius: 8px;
-  background: #0969da;
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.lingo-trigger:hover {
-  background: #0757b5;
-}
-
-.lingo-trigger:focus-visible {
-  outline: 2px solid #0969da;
-  outline-offset: 2px;
 }

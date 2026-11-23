@@ -1,5 +1,5 @@
 import { type CapturedContext, chooseMode, type LookupMode } from "@lingo/core";
-import { LookupCard } from "@lingo/ui";
+import { LookupCard, LookupTrigger } from "@lingo/ui";
 import {
   type CSSProperties,
   useCallback,
@@ -179,17 +179,12 @@ export function LookupApp({ host }: { host: Element }) {
   if (trigger) {
     const { captured, position } = trigger;
     return (
-      <button
-        type="button"
-        className="lingo-trigger"
+      <LookupTrigger
         style={{ left: position.x, top: position.y }}
-        aria-label="Look up with Lingo"
         // Keep the page's selection when the button is pressed.
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => run(captured, chooseMode(captured.selection), position)}
-      >
-        L
-      </button>
+      />
     );
   }
 
