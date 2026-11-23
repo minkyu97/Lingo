@@ -6,6 +6,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+!.env.e2e
 
 # Node
 node_modules/
@@ -29,3 +30,7 @@ DerivedData/
 # Local agent settings
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Playwright
+test-results/
+playwright-report/

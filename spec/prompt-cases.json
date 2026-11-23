@@ -1,0 +1,115 @@
+[
+  {
+    "name": "translate with a surrounding passage and a title",
+    "input": {
+      "mode": "translate",
+      "targetLanguage": "Korean",
+      "context": {
+        "selection": "bank",
+        "level": "paragraph",
+        "before": "She sat on the river ",
+        "after": " and watched the boats.",
+        "title": "A walk by the water"
+      }
+    },
+    "expected": {
+      "systemTemplate": "translate.withContext",
+      "user": "<context>\n<title>A walk by the water</title>\n<passage>She sat on the river [[bank]] and watched the boats.</passage>\n</context>\n<selection>bank</selection>"
+    }
+  },
+  {
+    "name": "translate with a passage but no title",
+    "input": {
+      "mode": "translate",
+      "targetLanguage": "English",
+      "context": {
+        "selection": "배",
+        "level": "sentence",
+        "before": "아침에 ",
+        "after": "를 타고 섬으로 갔다."
+      }
+    },
+    "expected": {
+      "systemTemplate": "translate.withContext",
+      "user": "<context>\n<passage>아침에 [[배]]를 타고 섬으로 갔다.</passage>\n</context>\n<selection>배</selection>"
+    }
+  },
+  {
+    "name": "translate a bare selection",
+    "input": {
+      "mode": "translate",
+      "targetLanguage": "Korean",
+      "context": {
+        "selection": "The quick brown fox jumps over the lazy dog.",
+        "level": "none"
+      }
+    },
+    "expected": {
+      "systemTemplate": "translate.withoutContext",
+      "user": "<selection>The quick brown fox jumps over the lazy dog.</selection>"
+    }
+  },
+  {
+    "name": "a title without a passage does not count as context",
+    "input": {
+      "mode": "translate",
+      "targetLanguage": "Korean",
+      "context": {
+        "selection": "Hello",
+        "level": "none",
+        "title": "Greetings"
+      }
+    },
+    "expected": {
+      "systemTemplate": "translate.withoutContext",
+      "user": "<selection>Hello</selection>"
+    }
+  },
+  {
+    "name": "define with a passage only before the selection",
+    "input": {
+      "mode": "define",
+      "targetLanguage": "Korean",
+      "context": {
+        "selection": "run",
+        "level": "paragraph",
+        "before": "The play had a long ",
+        "after": ""
+      }
+    },
+    "expected": {
+      "systemTemplate": "define.withContext",
+      "user": "<context>\n<passage>The play had a long [[run]]</passage>\n</context>\n<selection>run</selection>"
+    }
+  },
+  {
+    "name": "define a bare selection",
+    "input": {
+      "mode": "define",
+      "targetLanguage": "Japanese",
+      "context": {
+        "selection": "serendipity",
+        "level": "none"
+      }
+    },
+    "expected": {
+      "systemTemplate": "define.withoutContext",
+      "user": "<selection>serendipity</selection>"
+    }
+  },
+  {
+    "name": "multi-line selections keep their line breaks",
+    "input": {
+      "mode": "translate",
+      "targetLanguage": "Korean",
+      "context": {
+        "selection": "First line\nSecond line",
+        "level": "none"
+      }
+    },
+    "expected": {
+      "systemTemplate": "translate.withoutContext",
+      "user": "<selection>First line\nSecond line</selection>"
+    }
+  }
+]

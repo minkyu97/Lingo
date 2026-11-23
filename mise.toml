@@ -1,0 +1,5 @@
+# Toolchain versions for this repository. Run `mise install` once after cloning.
+# CI installs the same versions from this file.
+[tools]
+node = "26"
+"npm:pnpm" = "12.22.0"

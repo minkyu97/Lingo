@@ -1,0 +1,12 @@
+{
+  "name": "@lingo/spec",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./prompts.json": "./prompts.json",
+    "./prompt-cases.json": "./prompt-cases.json",
+    "./dictionary-entry.schema.json": "./dictionary-entry.schema.json",
+    "./fixtures/*": "./fixtures/*"
+  }
+}

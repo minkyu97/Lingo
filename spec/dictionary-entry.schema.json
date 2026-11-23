@@ -1,0 +1,56 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["headword", "pronunciation", "contextMeaning", "senses"],
+  "properties": {
+    "headword": {
+      "type": "string",
+      "description": "The dictionary form of the term, in the term's own language."
+    },
+    "pronunciation": {
+      "type": "string",
+      "description": "The pronunciation in IPA between slashes, or the reading for a script that needs one, such as kana or pinyin. An empty string when neither applies."
+    },
+    "contextMeaning": {
+      "type": "string",
+      "description": "What the term means in the given passage, in one or two sentences written in the reader's language. An empty string when no passage was given."
+    },
+    "senses": {
+      "type": "array",
+      "description": "Up to five senses, grouped by part of speech, most common first. Always includes the sense used in the passage.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "partOfSpeech",
+          "meaning",
+          "inContext",
+          "example",
+          "exampleTranslation"
+        ],
+        "properties": {
+          "partOfSpeech": {
+            "type": "string",
+            "description": "The part of speech, named in the reader's language."
+          },
+          "meaning": {
+            "type": "string",
+            "description": "A short equivalent or definition in the reader's language."
+          },
+          "inContext": {
+            "type": "boolean",
+            "description": "True for the sense the term has in the given passage, false otherwise."
+          },
+          "example": {
+            "type": "string",
+            "description": "A short example of this sense, in the term's own language."
+          },
+          "exampleTranslation": {
+            "type": "string",
+            "description": "The example translated into the reader's language."
+          }
+        }
+      }
+    }
+  }
+}
