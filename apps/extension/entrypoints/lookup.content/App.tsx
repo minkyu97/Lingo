@@ -2,6 +2,7 @@ import { type CapturedContext, chooseMode, type LookupMode } from "@lingo/core";
 import { LookupCard, LookupTrigger } from "@lingo/ui";
 import {
   type CSSProperties,
+  type PointerEvent,
   useCallback,
   useEffect,
   useRef,
@@ -9,6 +10,7 @@ import {
 } from "react";
 import { browser } from "wxt/browser";
 import { captureContext } from "../../src/context/dom.ts";
+import { followPointer } from "../../src/drag.ts";
 import { openLookup } from "../../src/lookup-client.ts";
 import {
   applyLookupEvent,
@@ -20,7 +22,12 @@ import {
   MAX_SELECTION_CHARS,
   type RuntimeMessage,
 } from "../../src/messaging.ts";
-import { type Point, placePanel, placeTrigger } from "../../src/position.ts";
+import {
+  type Point,
+  placeMovedPanel,
+  placePanel,
+  placeTrigger,
+} from "../../src/position.ts";
 
 interface Trigger {
   position: Point;
@@ -28,7 +35,10 @@ interface Trigger {
 }
 
 interface Panel {
-  position: Point;
+  /** Where the lookup was asked for. The card opens just below or above it. */
+  anchor: Point;
+  /** Where the user dragged the card's top-left corner to, once they have. */
+  moved?: Point;
   lookup: LookupState;
 }
 
@@ -58,6 +68,7 @@ function selectionAnchor(): Point {
 export function LookupApp({ host }: { host: Element }) {
   const [trigger, setTrigger] = useState<Trigger | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
+  const panelElement = useRef<HTMLDivElement>(null);
   const cancelLookup = useRef<() => void>(() => {});
 
   const close = useCallback(() => {
@@ -66,25 +77,46 @@ export function LookupApp({ host }: { host: Element }) {
     setPanel(null);
   }, []);
 
-  const run = useCallback(
-    (captured: CapturedContext, mode: LookupMode, position: Point) => {
-      cancelLookup.current();
+  /** Sends a request, and feeds what comes back into the card. */
+  const request = useCallback((captured: CapturedContext, mode: LookupMode) => {
+    cancelLookup.current();
+    cancelLookup.current = openLookup(
+      { type: "start", mode, context: captured },
+      (event) =>
+        setPanel(
+          (current) =>
+            current && {
+              ...current,
+              lookup: applyLookupEvent(current.lookup, event),
+            },
+        ),
+    );
+  }, []);
+
+  /** Looks up a new selection, in a card that opens at `anchor`. */
+  const lookUp = useCallback(
+    (captured: CapturedContext, mode: LookupMode, anchor: Point) => {
       setTrigger(null);
-      setPanel({ position, lookup: initialLookupState(mode, captured) });
-      cancelLookup.current = openLookup(
-        { type: "start", mode, context: captured },
-        (event) =>
-          setPanel(
-            (current) =>
-              current && {
-                ...current,
-                lookup: applyLookupEvent(current.lookup, event),
-              },
-          ),
-      );
+      setPanel({ anchor, lookup: initialLookupState(mode, captured) });
+      request(captured, mode);
     },
-    [],
+    [request],
   );
+
+  /** Asks again about the same selection, leaving the card where it is. */
+  const lookUpAgain = (mode: LookupMode) => {
+    if (!panel) return;
+    const { captured } = panel.lookup;
+    setPanel({ ...panel, lookup: initialLookupState(mode, captured) });
+    request(captured, mode);
+  };
+
+  const startDrag = (event: PointerEvent<HTMLElement>) => {
+    if (!panelElement.current) return;
+    followPointer(event, panelElement.current, (moved) =>
+      setPanel((current) => current && { ...current, moved }),
+    );
+  };
 
   useEffect(() => {
     const insideLingo = (event: Event) => event.composedPath().includes(host);
@@ -139,11 +171,11 @@ export function LookupApp({ host }: { host: Element }) {
       }
       const captured = captureContext();
       if (!captured || captured.selection.length > MAX_SELECTION_CHARS) return;
-      run(captured, chooseMode(captured.selection), selectionAnchor());
+      lookUp(captured, chooseMode(captured.selection), selectionAnchor());
     };
     browser.runtime.onMessage.addListener(onMessage);
     return () => browser.runtime.onMessage.removeListener(onMessage);
-  }, [run]);
+  }, [lookUp]);
 
   const openSettings = () => {
     const message: RuntimeMessage = { type: "open-settings" };
@@ -151,8 +183,10 @@ export function LookupApp({ host }: { host: Element }) {
   };
 
   if (panel) {
-    const { lookup, position } = panel;
-    const placed = placePanel(position, viewport());
+    const { lookup } = panel;
+    const placed = panel.moved
+      ? placeMovedPanel(panel.moved, viewport())
+      : placePanel(panel.anchor, viewport());
     const style = {
       left: placed.left,
       top: placed.top,
@@ -160,15 +194,16 @@ export function LookupApp({ host }: { host: Element }) {
       "--lingo-card-max-height": `${placed.maxHeight}px`,
     } as CSSProperties;
     return (
-      <div className="lingo-panel" style={style}>
+      <div className="lingo-panel" ref={panelElement} style={style}>
         <LookupCard
           mode={lookup.mode}
           status={lookup.status}
           text={lookup.text}
           context={lookup.context}
           error={lookup.error}
-          onModeChange={(mode) => run(lookup.captured, mode, position)}
-          onRetry={() => run(lookup.captured, lookup.mode, position)}
+          onModeChange={lookUpAgain}
+          onDragStart={startDrag}
+          onRetry={() => lookUpAgain(lookup.mode)}
           onOpenSettings={openSettings}
           onClose={close}
         />
@@ -183,7 +218,9 @@ export function LookupApp({ host }: { host: Element }) {
         style={{ left: position.x, top: position.y }}
         // Keep the page's selection when the button is pressed.
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => run(captured, chooseMode(captured.selection), position)}
+        onClick={() =>
+          lookUp(captured, chooseMode(captured.selection), position)
+        }
       />
     );
   }

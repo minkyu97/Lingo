@@ -309,6 +309,47 @@ test("closes on Escape and on a click outside", async ({
   await expect(panel(second)).toBeHidden();
 });
 
+test("moves when its header is dragged, and stays there", async ({
+  context,
+  extensionId,
+}) => {
+  await saveSettings(context, extensionId, async (options) => {
+    await options.getByLabel("Anthropic API key").fill("test-key");
+  });
+  const page = await openPageAndSelect(context, "bank");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+
+  const corner = async () => {
+    const box = await panel(page).boundingBox();
+    if (!box) throw new Error("The panel is not on screen");
+    return { x: box.x, y: box.y };
+  };
+  const before = await corner();
+  const header = await panel(page).locator("header").boundingBox();
+  if (!header) throw new Error("The panel has no header");
+  // The middle of the header, between its controls, is where the handle is.
+  const grip = {
+    x: header.x + header.width / 2,
+    y: header.y + header.height / 2,
+  };
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 200, grip.y + 120, { steps: 5 });
+  await page.mouse.up();
+
+  const after = await corner();
+  expect(after.x - before.x).toBeCloseTo(200, 0);
+  expect(after.y - before.y).toBeCloseTo(120, 0);
+  // Dragging neither closed the panel nor dropped the page's selection.
+  expect(await page.evaluate(() => getSelection()?.toString())).toBe("bank");
+
+  // Asking again in the other mode leaves the panel where it was put.
+  await panel(page).getByRole("button", { name: "Translate" }).click();
+  await expect(panel(page)).toContainText("안녕하세요");
+  expect(await corner()).toEqual(after);
+});
+
 test("looks up the selection when the shortcut message arrives", async ({
   context,
   extensionId,
