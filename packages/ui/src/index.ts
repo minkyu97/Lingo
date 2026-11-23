@@ -1,5 +1,7 @@
 export { Badge, type BadgeProps } from "./controls/Badge.tsx";
 export { Button, type ButtonProps } from "./controls/Button.tsx";
+export { Callout, type CalloutProps } from "./controls/Callout.tsx";
+export { ErrorMessage } from "./controls/ErrorMessage.tsx";
 export { Icon, type IconProps, type LucideIcon } from "./controls/Icon.tsx";
 export { IconButton, type IconButtonProps } from "./controls/IconButton.tsx";
 export {
@@ -18,3 +20,4 @@ export {
   type LookupCardProps,
   type LookupStatus,
 } from "./lookup/LookupCard.tsx";
+export { LookupTrigger } from "./lookup/LookupTrigger.tsx";

@@ -186,6 +186,44 @@
   color: var(--lingo-muted);
 }
 
+/* Callout */
+
+.lingo-callout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lingo-space-2);
+  padding: var(--lingo-space-8) var(--lingo-space-12);
+  border-radius: var(--lingo-radius-md);
+  background: var(--lingo-subtle);
+  overflow-wrap: anywhere;
+}
+
+.lingo-callout__label {
+  color: var(--lingo-muted);
+  font: var(--lingo-text-group-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lingo-callout__text {
+  font: var(--lingo-text-paragraph);
+}
+
+/* Error message */
+
+.lingo-error-message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lingo-space-8);
+  overflow-wrap: anywhere;
+}
+
+.lingo-error-message .lingo-icon {
+  /* Centers the 16px icon on the first 20px line of text. */
+  margin-top: 2px;
+  color: var(--lingo-danger);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lingo-switch,
   .lingo-switch::after {
