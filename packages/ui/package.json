@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@lingo/core": "workspace:*",
+    "lucide-react": "catalog:",
     "react": "catalog:"
   },
   "devDependencies": {
