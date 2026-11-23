@@ -1,20 +1,8 @@
-/*
- * Styles for the shared Lingo components.
- *
- * Sizes are in px on purpose. These components also render inside web pages,
- * where rem would follow the page's root font size.
- */
+@import "./tokens.css";
+
+/* The lookup card: one answer, its mode, and what was sent to get it. */
 
 .lingo-card {
-  --lingo-bg: #ffffff;
-  --lingo-fg: #1f2328;
-  --lingo-muted: #656d76;
-  --lingo-border: #d0d7de;
-  --lingo-subtle: #f6f8fa;
-  --lingo-accent: #0969da;
-  --lingo-danger: #cf222e;
-
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   width: 360px;
@@ -24,51 +12,9 @@
   border: 1px solid var(--lingo-border);
   border-radius: 10px;
   background: var(--lingo-bg);
-  color: var(--lingo-fg);
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
-  font-family:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
   font-size: 14px;
   line-height: 1.5;
-  text-align: left;
-}
-
-@media (prefers-color-scheme: dark) {
-  .lingo-card {
-    --lingo-bg: #1f2328;
-    --lingo-fg: #e6edf3;
-    --lingo-muted: #9198a1;
-    --lingo-border: #3d444d;
-    --lingo-subtle: #2a3037;
-    --lingo-accent: #4493f8;
-    --lingo-danger: #f85149;
-  }
-}
-
-.lingo-card *,
-.lingo-card *::before,
-.lingo-card *::after {
-  box-sizing: border-box;
-}
-
-.lingo-card p,
-.lingo-card h3,
-.lingo-card ol {
-  margin: 0;
-}
-
-.lingo-card button {
-  margin: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.lingo-card button:focus-visible {
-  outline: 2px solid var(--lingo-accent);
-  outline-offset: 1px;
 }
 
 .lingo-card__header,

@@ -85,7 +85,7 @@ export function LookupCard(props: LookupCardProps) {
   }
 
   return (
-    <section className="lingo-card" aria-label="Lingo lookup">
+    <section className="lingo lingo-card" aria-label="Lingo lookup">
       <header className="lingo-card__header">
         <div className="lingo-card__modes">
           {MODES.map(({ id, label }) => (

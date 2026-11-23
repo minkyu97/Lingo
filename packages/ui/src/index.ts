@@ -1,9 +1,9 @@
 export {
   DictionaryEntryView,
   type DictionaryEntryViewProps,
-} from "./DictionaryEntryView.tsx";
+} from "./lookup/DictionaryEntryView.tsx";
 export {
   LookupCard,
   type LookupCardProps,
   type LookupStatus,
-} from "./LookupCard.tsx";
+} from "./lookup/LookupCard.tsx";

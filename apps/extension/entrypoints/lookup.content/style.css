@@ -1,4 +1,4 @@
-@import "@lingo/ui/styles.css";
+@import "@lingo/ui/lookup.css";
 
 /*
  * Both elements are pinned to the viewport and sit above the page. Sizes are

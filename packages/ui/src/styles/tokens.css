@@ -1,0 +1,117 @@
+/*
+ * Design tokens for every Lingo component. The values mirror the variables,
+ * text styles, and shadow styles of the Lingo design file.
+ *
+ * A component tree starts at an element with the class `lingo`, which sets
+ * the tokens and the base text.
+ *
+ * Sizes are in px on purpose. These components also render inside web pages,
+ * where rem would follow the page's root font size.
+ */
+
+.lingo {
+  /* Color */
+  --lingo-bg: #ffffff;
+  --lingo-fg: #1f2328;
+  --lingo-muted: #656d76;
+  --lingo-border: #d0d7de;
+  --lingo-subtle: #f6f8fa;
+  --lingo-accent: #0969da;
+  --lingo-accent-hover: #0757b5;
+  --lingo-accent-fg: #ffffff;
+  --lingo-accent-subtle: rgb(9 105 218 / 0.12);
+  --lingo-danger: #cf222e;
+  --lingo-success: #1a7f37;
+  --lingo-knob: #ffffff;
+
+  /* Space */
+  --lingo-space-2: 2px;
+  --lingo-space-4: 4px;
+  --lingo-space-8: 8px;
+  --lingo-space-12: 12px;
+  --lingo-space-16: 16px;
+  --lingo-space-24: 24px;
+
+  /* Radius */
+  --lingo-radius-xs: 4px;
+  --lingo-radius-sm: 6px;
+  --lingo-radius-md: 8px;
+  --lingo-radius-lg: 10px;
+  --lingo-radius-full: 999px;
+
+  /* Size */
+  --lingo-popover-width: 360px;
+  --lingo-panel-width: 360px;
+
+  /* Elevation: one shadow for each height above the page. */
+  --lingo-shadow-raised: 0 2px 8px rgb(0 0 0 / 0.16);
+  --lingo-shadow-popover: 0 8px 24px rgb(0 0 0 / 0.16);
+  --lingo-shadow-panel: -8px 0 24px rgb(0 0 0 / 0.24);
+
+  /* Type: weight, size, and line height, on the platform's interface font. */
+  --lingo-font:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --lingo-text-heading: 600 18px / 24px var(--lingo-font);
+  --lingo-text-title: 600 16px / 24px var(--lingo-font);
+  --lingo-text-body: 400 14px / 20px var(--lingo-font);
+  --lingo-text-body-strong: 600 14px / 20px var(--lingo-font);
+  --lingo-text-paragraph: 400 14px / 22px var(--lingo-font);
+  --lingo-text-small: 400 13px / 18px var(--lingo-font);
+  --lingo-text-small-strong: 600 13px / 18px var(--lingo-font);
+  --lingo-text-caption: 400 12px / 16px var(--lingo-font);
+  --lingo-text-caption-strong: 600 12px / 16px var(--lingo-font);
+  /* Set in capitals with 0.04em of letter spacing where it is used. */
+  --lingo-text-group-label: 600 11px / 16px var(--lingo-font);
+
+  box-sizing: border-box;
+  color: var(--lingo-fg);
+  font: var(--lingo-text-body);
+  text-align: left;
+}
+
+@media (prefers-color-scheme: dark) {
+  .lingo {
+    --lingo-bg: #1f2328;
+    --lingo-fg: #e6edf3;
+    --lingo-muted: #9198a1;
+    --lingo-border: #3d444d;
+    --lingo-subtle: #2a3037;
+    --lingo-accent: #4493f8;
+    --lingo-accent-hover: #58a6ff;
+    --lingo-accent-fg: #0d1117;
+    --lingo-accent-subtle: rgb(68 147 248 / 0.18);
+    --lingo-danger: #f85149;
+    --lingo-success: #3fb950;
+    --lingo-knob: #e6edf3;
+  }
+}
+
+.lingo *,
+.lingo *::before,
+.lingo *::after {
+  box-sizing: border-box;
+}
+
+/*
+ * Resets. `:where` keeps them at zero specificity, so a component's own class
+ * always wins over them.
+ */
+
+:where(.lingo) :where(p, h1, h2, h3, ol, ul) {
+  margin: 0;
+}
+
+:where(.lingo) :where(button) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+:where(.lingo) :where(button, a, input):focus-visible {
+  outline: 2px solid var(--lingo-accent);
+  outline-offset: 1px;
+}
