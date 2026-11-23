@@ -1,0 +1,194 @@
+/* Controls shared by the lookup popup and the settings panel. */
+
+.lingo-icon {
+  flex: none;
+}
+
+.lingo-logo {
+  display: block;
+  flex: none;
+}
+
+/* Button */
+
+.lingo-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lingo-space-4);
+  height: 28px;
+  padding: 0 var(--lingo-space-12);
+  border-radius: var(--lingo-radius-sm);
+  font: var(--lingo-text-small-strong);
+  white-space: nowrap;
+}
+
+.lingo-button--primary {
+  background: var(--lingo-accent);
+  color: var(--lingo-accent-fg);
+}
+
+.lingo-button--primary:hover {
+  background: var(--lingo-accent-hover);
+}
+
+.lingo-button--secondary {
+  border: 1px solid var(--lingo-border);
+  background: var(--lingo-bg);
+}
+
+.lingo-button--secondary:hover,
+.lingo-button--ghost:hover {
+  background: var(--lingo-subtle);
+}
+
+/* Text button */
+
+.lingo-text-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--lingo-space-4);
+  height: 24px;
+  padding: 0 var(--lingo-space-4);
+  border-radius: var(--lingo-radius-xs);
+  color: var(--lingo-muted);
+  font: var(--lingo-text-caption);
+  white-space: nowrap;
+}
+
+.lingo-text-button:hover {
+  background: var(--lingo-subtle);
+  color: var(--lingo-fg);
+}
+
+/* Icon button */
+
+.lingo-icon-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--lingo-radius-sm);
+  color: var(--lingo-muted);
+}
+
+.lingo-icon-button:hover {
+  background: var(--lingo-subtle);
+}
+
+.lingo-icon-button[aria-pressed="true"] {
+  background: var(--lingo-accent-subtle);
+  color: var(--lingo-accent);
+}
+
+/* Segmented control */
+
+.lingo-segmented {
+  display: flex;
+  gap: var(--lingo-space-2);
+  padding: var(--lingo-space-2);
+  border-radius: var(--lingo-radius-md);
+  background: var(--lingo-subtle);
+}
+
+.lingo-segmented__option {
+  flex: 1 1 0;
+  height: 32px;
+  padding: 0 var(--lingo-space-12);
+  border: 1px solid transparent;
+  border-radius: var(--lingo-radius-sm);
+  color: var(--lingo-muted);
+  font: var(--lingo-text-body);
+  white-space: nowrap;
+}
+
+.lingo-segmented__option[aria-pressed="true"] {
+  border-color: var(--lingo-border);
+  background: var(--lingo-bg);
+  color: var(--lingo-fg);
+  font: var(--lingo-text-body-strong);
+}
+
+.lingo-segmented--small {
+  display: inline-flex;
+  flex: none;
+  border-radius: var(--lingo-radius-sm);
+}
+
+.lingo-segmented--small .lingo-segmented__option {
+  flex: none;
+  height: 24px;
+  padding: 0 var(--lingo-space-8);
+  border-radius: var(--lingo-radius-xs);
+  font: var(--lingo-text-small);
+}
+
+.lingo-segmented--small .lingo-segmented__option[aria-pressed="true"] {
+  font: var(--lingo-text-small-strong);
+}
+
+/* Switch */
+
+.lingo-switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  border-radius: var(--lingo-radius-full);
+  background: var(--lingo-border);
+  transition: background-color 120ms;
+}
+
+.lingo-switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--lingo-radius-full);
+  background: var(--lingo-knob);
+  content: "";
+  transition: transform 120ms;
+}
+
+.lingo-switch[aria-checked="true"] {
+  background: var(--lingo-accent);
+}
+
+.lingo-switch[aria-checked="true"]::after {
+  transform: translateX(16px);
+}
+
+/* Badge */
+
+.lingo-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 18px;
+  padding: 0 var(--lingo-space-8);
+  border-radius: var(--lingo-radius-full);
+  font: var(--lingo-text-caption);
+  white-space: nowrap;
+}
+
+.lingo-badge--accent {
+  background: var(--lingo-accent-subtle);
+  color: var(--lingo-accent);
+}
+
+.lingo-badge--neutral {
+  background: var(--lingo-subtle);
+  color: var(--lingo-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lingo-switch,
+  .lingo-switch::after {
+    transition: none;
+  }
+}
