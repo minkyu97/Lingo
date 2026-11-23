@@ -11,20 +11,20 @@ Background research:
 
 ## Decisions at a glance
 
-| Topic              | Decision                                                                                                           |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Repository         | One repo for all surfaces, organized as a pnpm workspace                                                           |
-| Toolchain          | Node and pnpm versions are pinned in `mise.toml`. Local setup and CI both install from it                          |
-| Lint and format    | Biome with its recommended rules, for every language it supports                                                   |
-| Tests              | Vitest for unit tests. Playwright for end-to-end tests of the extension                                            |
-| Validation         | Zod schemas, written with `zod/mini`, wherever untyped data becomes typed: messages, stored data, and model output |
-| Browser extension  | WXT + React + TypeScript; Chrome MV3 first, Safari from the same code. Requires Chrome 140 or later                |
-| Desktop            | Tauri 2 for macOS and Windows, sharing the React UI and TypeScript core. Electron is the fallback                  |
-| iOS / iPadOS       | Native SwiftUI app with a default-translation extension and a Safari Web Extension                                 |
-| Shared logic       | TypeScript packages for extension and desktop; a thin Swift port for iOS; shared prompts and fixtures in `spec/`   |
-| LLM access         | Bring your own key. The app calls provider APIs directly; there is no Lingo server                                 |
-| macOS distribution | Developer ID + notarization, outside the Mac App Store                                                             |
-| Build order        | Extension → desktop spike → desktop → iOS                                                                          |
+| Topic              | Decision                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Repository         | One repo for all surfaces, organized as a pnpm workspace                                                         |
+| Toolchain          | Node and pnpm versions are pinned in `mise.toml`. Local setup and CI both install from it                        |
+| Lint and format    | Biome with its recommended rules, for every language it supports                                                 |
+| Tests              | Vitest for unit tests. Playwright for end-to-end tests of the extension                                          |
+| Validation         | Zod schemas wherever untyped data becomes typed: messages, stored data, and model output                         |
+| Browser extension  | WXT + React + TypeScript; Chrome MV3 first, Safari from the same code. Requires Chrome 140 or later              |
+| Desktop            | Tauri 2 for macOS and Windows, sharing the React UI and TypeScript core. Electron is the fallback                |
+| iOS / iPadOS       | Native SwiftUI app with a default-translation extension and a Safari Web Extension                               |
+| Shared logic       | TypeScript packages for extension and desktop; a thin Swift port for iOS; shared prompts and fixtures in `spec/` |
+| LLM access         | Bring your own key. The app calls provider APIs directly; there is no Lingo server                               |
+| macOS distribution | Developer ID + notarization, outside the Mac App Store                                                           |
+| Build order        | Extension → desktop spike → desktop → iOS                                                                        |
 
 ## Repository layout
 
@@ -115,7 +115,7 @@ Data that arrives without a trustworthy type goes through a Zod schema, and the 
 | Stored API keys and model IDs  | `perProviderTextSchema` in `core` | Wrong entries are left out                                          |
 | A model's dictionary entry     | `packages/core/src/dictionary.ts` | Each missing or wrong field reads as empty                          |
 
-Schemas are written with `zod/mini`, the tree-shakable form of Zod. The content script is injected into every frame of every page, and the regular `zod` entry point added 83 kB to it where `zod/mini` adds 23 kB.
+Schemas use the regular `zod` API, chosen for readability over size. It adds about 83 kB to the content script, which is injected into every frame of every page. The tree-shakable `zod/mini` would add about 23 kB, at the cost of a wordier, function-style notation.
 
 Not everything typed `unknown` needs a schema:
 
@@ -365,14 +365,14 @@ Deferred. `ACTION_PROCESS_TEXT` provides the selected text only, so the feature 
 
 ## Open risks
 
-| Risk                                                                                                  | Plan                                                                                                    |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Tauri cannot deliver a focus-preserving panel on Windows                                              | The desktop spike; Electron fallback                                                                    |
-| The macOS panel depends on a single-maintainer plugin                                                 | Same spike; the plugin is small enough to fork or replace                                               |
-| Accessibility coverage is lower than estimated in key apps                                            | Measure during the spike; selection-only fallback always works                                          |
-| Safari kills the background script mid-request                                                        | Short requests, resumable page translation                                                              |
-| App Store rejects a bring-your-own-key app                                                            | Build the iOS app last; keep the extension and desktop independent of it                                |
-| Default-translation extension limits are undocumented                                                 | Prototype early in step 4                                                                               |
-| The content script loads React into every frame of every page, about 240 kB                           | Measure the effect on page load. Switch to a lighter renderer or load the UI on first use if it matters |
-| Automated tests do not press the real Chrome shortcut or call a real provider from the service worker | Check both by hand before a release. `pnpm smoke` covers the adapters against the real APIs from Node   |
-| A content script on every page lengthens Chrome Web Store review                                      | Accepted: the button has to appear wherever text is selected                                            |
+| Risk                                                                                                  | Plan                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Tauri cannot deliver a focus-preserving panel on Windows                                              | The desktop spike; Electron fallback                                                                                                      |
+| The macOS panel depends on a single-maintainer plugin                                                 | Same spike; the plugin is small enough to fork or replace                                                                                 |
+| Accessibility coverage is lower than estimated in key apps                                            | Measure during the spike; selection-only fallback always works                                                                            |
+| Safari kills the background script mid-request                                                        | Short requests, resumable page translation                                                                                                |
+| App Store rejects a bring-your-own-key app                                                            | Build the iOS app last; keep the extension and desktop independent of it                                                                  |
+| Default-translation extension limits are undocumented                                                 | Prototype early in step 4                                                                                                                 |
+| The content script loads React and Zod into every frame of every page, about 330 kB                   | Measure the effect on page load. If it matters, load the UI on first use, switch to a lighter renderer, or move the schemas to `zod/mini` |
+| Automated tests do not press the real Chrome shortcut or call a real provider from the service worker | Check both by hand before a release. `pnpm smoke` covers the adapters against the real APIs from Node                                     |
+| A content script on every page lengthens Chrome Web Store review                                      | Accepted: the button has to appear wherever text is selected                                                                              |

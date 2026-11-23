@@ -1,11 +1,11 @@
-import * as z from "zod/mini";
+import { z } from "zod";
 import { parsePartialJson } from "./partial-json.ts";
 
 /**
  * A text field of an entry. It reads as empty until it has arrived, and when
  * the model sent something that is not text.
  */
-const textField = z.catch(z.string(), "");
+const textField = z.string().catch("");
 
 /**
  * One meaning of a term. The shape matches
@@ -18,14 +18,12 @@ const senseSchema = z.object({
   /** A short equivalent or definition in the reader's language. */
   meaning: textField,
   /** Whether this is the sense the term has in the captured passage. */
-  inContext: z.catch(z.boolean(), false),
+  inContext: z.boolean().catch(false),
   /** A short example in the term's own language. */
   example: textField,
   /** The example in the reader's language. */
   exampleTranslation: textField,
 });
-
-export type DictionarySense = z.infer<typeof senseSchema>;
 
 /** A dictionary entry for a looked-up term. */
 const entrySchema = z.object({
@@ -36,14 +34,13 @@ const entrySchema = z.object({
   /** What the term means in the captured passage. Empty without a passage. */
   contextMeaning: textField,
   // A member that is not an object is dropped. The others are kept.
-  senses: z.pipe(
-    z.catch(z.array(z.catch(z.nullable(senseSchema), null)), []),
-    z.transform((senses: (DictionarySense | null)[]) =>
-      senses.filter((sense) => sense !== null),
-    ),
-  ),
+  senses: z
+    .array(senseSchema.nullable().catch(null))
+    .catch([])
+    .transform((senses) => senses.filter((sense) => sense !== null)),
 });
 
+export type DictionarySense = z.infer<typeof senseSchema>;
 export type DictionaryEntry = z.infer<typeof entrySchema>;
 
 /**

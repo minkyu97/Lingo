@@ -3,7 +3,7 @@ import {
   type LLMErrorKind,
   LOOKUP_MODES,
 } from "@lingo/core";
-import * as z from "zod/mini";
+import { z } from "zod";
 
 /** Name of the port a content script opens for one lookup. */
 export const LOOKUP_PORT = "lingo:lookup";
@@ -18,10 +18,7 @@ const MAX_SIDE_CHARS = 8_000;
  * An optional piece of text from the page. Anything that is not text with
  * something in it reads as absent, rather than failing the whole message.
  */
-const pageText = z.catch(
-  z.optional(z.string().check(z.minLength(1))),
-  undefined,
-);
+const pageText = z.string().min(1).optional().catch(undefined);
 
 /**
  * Content scripts run inside web pages, so the background does not trust what
@@ -31,37 +28,26 @@ const pageText = z.catch(
 const lookupRequestSchema = z.object({
   type: z.literal("start"),
   mode: z.enum(LOOKUP_MODES),
-  context: z.pipe(
-    z.object({
-      selection: z
-        .string()
-        .check(z.trim(), z.minLength(1), z.maxLength(MAX_SELECTION_CHARS)),
+  context: z
+    .object({
+      selection: z.string().trim().min(1).max(MAX_SELECTION_CHARS),
       before: pageText,
       after: pageText,
       title: pageText,
       url: pageText,
+    })
+    .transform((context): CapturedContext => {
+      const before = context.before?.slice(-MAX_SIDE_CHARS);
+      const after = context.after?.slice(0, MAX_SIDE_CHARS);
+      return {
+        selection: context.selection,
+        level: before || after ? "paragraph" : "none",
+        before,
+        after,
+        title: context.title?.slice(0, 300),
+        url: context.url?.slice(0, 2000),
+      };
     }),
-    z.transform(
-      (context: {
-        selection: string;
-        before?: string;
-        after?: string;
-        title?: string;
-        url?: string;
-      }): CapturedContext => {
-        const before = context.before?.slice(-MAX_SIDE_CHARS);
-        const after = context.after?.slice(0, MAX_SIDE_CHARS);
-        return {
-          selection: context.selection,
-          level: before || after ? "paragraph" : "none",
-          before,
-          after,
-          title: context.title?.slice(0, 300),
-          url: context.url?.slice(0, 2000),
-        };
-      },
-    ),
-  ),
 });
 
 /** Content script to background: sent once, right after the port opens. */

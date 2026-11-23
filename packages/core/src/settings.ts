@@ -1,4 +1,4 @@
-import * as z from "zod/mini";
+import { z } from "zod";
 
 export const PROVIDER_IDS = ["anthropic", "openai"] as const;
 
@@ -44,31 +44,27 @@ export const TARGET_LANGUAGES: readonly string[] = [
 ];
 
 /** Text with something in it. Anything else reads as absent. */
-const optionalText = z.catch(
-  z.optional(z.string().check(z.trim(), z.minLength(1))),
-  undefined,
-);
+const optionalText = z.string().trim().min(1).optional().catch(undefined);
 
 /**
  * One optional piece of text per provider, such as a model ID or an API key.
  * An entry that is missing, blank, or not text is left out.
  */
-export const perProviderTextSchema = z.pipe(
-  z.object(
+export const perProviderTextSchema = z
+  .object(
     Object.fromEntries(PROVIDER_IDS.map((id) => [id, optionalText])) as Record<
       ProviderId,
       typeof optionalText
     >,
-  ),
-  z.transform((entries: Record<ProviderId, string | undefined>) => {
+  )
+  .transform((entries) => {
     const present: Partial<Record<ProviderId, string>> = {};
     for (const id of PROVIDER_IDS) {
       const value = entries[id];
       if (value !== undefined) present[id] = value;
     }
     return present;
-  }),
-);
+  });
 
 /** Settings for a first run. The target language follows the given locale. */
 export function defaultSettings(locale?: string): Settings {
@@ -89,22 +85,21 @@ export function defaultSettings(locale?: string): Settings {
 export function normalizeSettings(value: unknown, locale?: string): Settings {
   // The schema is built per call, because the defaults depend on the locale.
   const defaults = defaultSettings(locale);
-  const schema = z.catch(
-    z.object({
-      provider: z.catch(z.enum(PROVIDER_IDS), defaults.provider),
-      models: z.catch(perProviderTextSchema, {}),
-      targetLanguage: z.catch(
-        z.string().check(z.refine(isLanguageTag)),
-        defaults.targetLanguage,
-      ),
-      contextAwareness: z.catch(z.boolean(), defaults.contextAwareness),
-      maxContextChars: z.catch(
-        z.pipe(z.number(), z.transform(clampContextChars)),
-        defaults.maxContextChars,
-      ),
-    }),
-    defaults,
-  );
+  const schema = z
+    .object({
+      provider: z.enum(PROVIDER_IDS).catch(defaults.provider),
+      models: perProviderTextSchema.catch({}),
+      targetLanguage: z
+        .string()
+        .refine(isLanguageTag)
+        .catch(defaults.targetLanguage),
+      contextAwareness: z.boolean().catch(defaults.contextAwareness),
+      maxContextChars: z
+        .number()
+        .transform(clampContextChars)
+        .catch(defaults.maxContextChars),
+    })
+    .catch(defaults);
 
   const settings: Settings = schema.parse(value);
   return settings;

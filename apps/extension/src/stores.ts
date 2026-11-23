@@ -6,13 +6,13 @@ import {
 } from "@lingo/core";
 import { browser } from "wxt/browser";
 import { storage } from "wxt/utils/storage";
-import * as z from "zod/mini";
+import type { z } from "zod";
 
 /** One API key per provider, for the providers that have one. */
 export type ApiKeys = z.infer<typeof perProviderTextSchema>;
 
 /** What is in storage may be old or damaged. Anything unusable reads as no keys. */
-const storedApiKeys = z.catch(perProviderTextSchema, {});
+const storedApiKeys = perProviderTextSchema.catch({});
 
 const settingsItem = storage.defineItem<unknown>("local:settings");
 const apiKeysItem = storage.defineItem<unknown>("local:apiKeys");
