@@ -34,3 +34,5 @@ CLAUDE.local.md
 # Playwright
 test-results/
 playwright-report/
+
+paseo.json
