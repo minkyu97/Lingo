@@ -97,15 +97,10 @@ const trigger = (page: Page) =>
   page.getByRole("button", { name: "Look up with Lingo" });
 
 /**
- * Opens the test page and selects one word the way a user would, by
- * double-clicking it. Resolves once the Lingo button has appeared.
+ * Selects one word of the test page the way a user would, by double-clicking
+ * it. Resolves once the Lingo button has appeared.
  */
-async function openPageAndSelect(context: BrowserContext, word: string) {
-  const page = await context.newPage();
-  await page.goto(`${SERVER}/page`);
-  // The content script mounts after the page has loaded.
-  await page.locator("lingo-lookup").waitFor({ state: "attached" });
-
+async function selectWord(page: Page, word: string) {
   const box = await page.evaluate((target) => {
     const node = document.querySelector("#text")?.firstChild as Text;
     const start = node.data.indexOf(target);
@@ -122,6 +117,15 @@ async function openPageAndSelect(context: BrowserContext, word: string) {
     await expect(trigger(page)).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10_000 });
   expect(await page.evaluate(() => getSelection()?.toString())).toBe(word);
+}
+
+/** Opens the test page and selects one word on it. */
+async function openPageAndSelect(context: BrowserContext, word: string) {
+  const page = await context.newPage();
+  await page.goto(`${SERVER}/page`);
+  // The content script mounts after the page has loaded.
+  await page.locator("lingo-lookup").waitFor({ state: "attached" });
+  await selectWord(page, word);
   return page;
 }
 
@@ -307,6 +311,49 @@ test("closes on Escape and on a click outside", async ({
   await expect(panel(second)).toBeVisible();
   await second.mouse.click(5, 5);
   await expect(panel(second)).toBeHidden();
+});
+
+test("stays open while pinned, until Close is pressed", async ({
+  context,
+  extensionId,
+}) => {
+  await saveSettings(context, extensionId, async (options) => {
+    await options.getByLabel("Anthropic API key").fill("test-key");
+  });
+  const page = await openPageAndSelect(context, "bank");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+
+  const pin = panel(page).getByRole("button", { name: "Pin" });
+  await pin.click();
+  await expect(pin).toHaveAttribute("aria-pressed", "true");
+
+  // What closes an unpinned panel leaves this one alone.
+  await page.keyboard.press("Escape");
+  await page.mouse.click(5, 5);
+  await expect(panel(page)).toBeVisible();
+
+  // A new lookup shows in the pinned panel, where it already is.
+  const place = await panel(page).boundingBox();
+  await selectWord(page, "boats");
+  await trigger(page).click();
+  await expect(trigger(page)).toBeHidden();
+  await expect.poll(async () => (await recordedRequests(page)).length).toBe(2);
+  const [, second] = await recordedRequests(page);
+  expect(second?.body.messages?.[0]?.content).toContain("[[boats]]");
+  await expectFinishedEntry(page);
+  expect(await panel(page).boundingBox()).toEqual(place);
+  await expect(pin).toHaveAttribute("aria-pressed", "true");
+
+  await panel(page).getByRole("button", { name: "Close" }).click();
+  await expect(panel(page)).toBeHidden();
+
+  // The next panel starts unpinned.
+  await selectWord(page, "river");
+  await trigger(page).click();
+  await expect(pin).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toBeHidden();
 });
 
 test("moves when its header is dragged, and stays there", async ({
