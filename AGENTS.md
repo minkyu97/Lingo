@@ -82,6 +82,15 @@ Formatting and linting are automated. Run the tools instead of formatting by han
 - Fix a lint finding in the code. Suppress one only with a `biome-ignore` comment that gives the reason. Do not turn a rule off for the whole repo to get a change through.
 - **A new language brings its formatter and linter with it.** The change that adds the first Rust or Swift file also adds that language's standard tools with their default rules (`rustfmt` and Clippy for Rust, `swift-format` for Swift), their config files, a CI check, and a line in this section.
 
+## Design
+
+The interface is designed in Figma, in the Lingo design file, before it is built. That file holds the design tokens, the shared components, and the screens.
+
+- **Design first, then code.** When a change adds or alters something a user sees, change the design file first: add or update the components, and draw the screens and states the change affects. Show the design and get it accepted. Only then write the code. Do not design in code and document it afterwards.
+- **One vocabulary.** `packages/ui/src/styles/tokens.css` mirrors the variables of the design file, name for name and value for value. A new or changed token goes into both as part of the same work.
+- **Reuse before adding.** Build a screen from the components the design file and `@lingo/ui` already have. Add a component, to both, only when none fits.
+- A change with no visible effect needs no design step: a refactor, or a fix that restores what the design already shows.
+
 ## Ground rules
 
 - **Everything in the repo is written in English**: documents, code comments, commit messages, and identifiers. This holds whatever language the conversation is in.
