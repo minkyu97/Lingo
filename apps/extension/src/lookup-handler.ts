@@ -18,7 +18,8 @@ export interface LookupPort {
 export interface LookupDeps {
   loadSettings(): Promise<Settings>;
   loadApiKey(provider: ProviderId): Promise<string | undefined>;
-  createProvider(options: CreateProviderOptions): LLMProvider;
+  /** A lookup only streams, so that is all it asks of a provider. */
+  createProvider(options: CreateProviderOptions): Pick<LLMProvider, "stream">;
   /** Overrides the provider's API address. Used by end-to-end tests. */
   baseURL?(provider: ProviderId): string | undefined;
   pingIntervalMs?: number;

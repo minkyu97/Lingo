@@ -6,6 +6,7 @@ import {
 } from "@lingo/core";
 import OpenAI from "openai";
 import { OPENAI_DEFAULT_MODEL, OPENAI_MODELS } from "./catalog.ts";
+import { KEY_CHECK_MAX_RETRIES, KEY_CHECK_TIMEOUT_MS } from "./key-check.ts";
 
 export interface OpenAIProviderOptions {
   apiKey: string;
@@ -84,7 +85,19 @@ export function createOpenAIProvider(
     }
   }
 
-  return { stream };
+  async function checkKey(): Promise<void> {
+    try {
+      // Listing models needs a valid key and generates nothing, so it is free.
+      await client.models.list({
+        timeout: KEY_CHECK_TIMEOUT_MS,
+        maxRetries: options.maxRetries ?? KEY_CHECK_MAX_RETRIES,
+      });
+    } catch (error) {
+      throw toLLMError(error);
+    }
+  }
+
+  return { stream, checkKey };
 }
 
 function toLLMError(error: unknown): LLMError {

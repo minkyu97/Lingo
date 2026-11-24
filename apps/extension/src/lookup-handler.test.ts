@@ -33,7 +33,10 @@ function fakePort() {
   };
 }
 
-function providerYielding(...chunks: string[]): LLMProvider {
+/** The part of a provider that a lookup uses. */
+type StreamingProvider = Pick<LLMProvider, "stream">;
+
+function providerYielding(...chunks: string[]): StreamingProvider {
   return {
     async *stream() {
       yield* chunks;
@@ -44,7 +47,7 @@ function providerYielding(...chunks: string[]): LLMProvider {
 interface Setup {
   settings?: Partial<Settings>;
   apiKey?: string | null;
-  provider?: LLMProvider;
+  provider?: StreamingProvider;
   baseURL?: LookupDeps["baseURL"];
 }
 

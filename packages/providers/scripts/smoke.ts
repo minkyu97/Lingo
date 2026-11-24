@@ -13,6 +13,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   type CapturedContext,
   type ChatRequest,
+  LLMError,
   PROVIDER_IDS,
   type ProviderId,
   parseDictionaryEntry,
@@ -151,12 +152,43 @@ async function defineOnce(
   }
 }
 
+/** The key check must pass a real key and turn down a made-up one. */
+async function checkKeys(provider: ProviderId, apiKey: string): Promise<void> {
+  await createProvider({
+    provider,
+    apiKey,
+    fetch: fetchWithOrigin,
+  }).checkKey();
+  console.log("  ok    key check accepts the real key");
+
+  const rejection = await createProvider({
+    provider,
+    apiKey: "lingo-smoke-check-not-a-key",
+    fetch: fetchWithOrigin,
+  })
+    .checkKey()
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+  if (!(rejection instanceof LLMError) || rejection.kind !== "auth") {
+    throw new Error(`a made-up key was not rejected: ${String(rejection)}`);
+  }
+  console.log("  ok    key check rejects a made-up key");
+}
+
 for (const provider of PROVIDER_IDS) {
   const apiKey = process.env[KEY_VARIABLES[provider]];
   console.log(`\n${PROVIDERS[provider].label}`);
   if (!apiKey) {
     console.log(`  skip  ${KEY_VARIABLES[provider]} is not set`);
     continue;
+  }
+
+  try {
+    await checkKeys(provider, apiKey);
+  } catch (error) {
+    fail("key check", error);
   }
 
   for (const { id } of PROVIDERS[provider].models) {

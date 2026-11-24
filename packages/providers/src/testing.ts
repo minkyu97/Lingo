@@ -8,8 +8,10 @@ export function fixture(name: string): string {
 }
 
 export interface RecordedCall {
+  method: string;
   url: string;
   headers: Headers;
+  /** The JSON body. Empty for a request without one, such as a GET. */
   body: Record<string, unknown>;
 }
 
@@ -18,10 +20,12 @@ export function fakeFetch(respond: () => Response) {
   const calls: RecordedCall[] = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const request = new Request(input, init);
+    const text = await request.text();
     calls.push({
+      method: request.method,
       url: request.url,
       headers: request.headers,
-      body: JSON.parse(await request.text()),
+      body: text ? JSON.parse(text) : {},
     });
     return respond();
   };
@@ -32,6 +36,13 @@ export function sseResponse(body: string): Response {
   return new Response(body, {
     status: 200,
     headers: { "content-type": "text/event-stream" },
+  });
+}
+
+export function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
   });
 }
 
