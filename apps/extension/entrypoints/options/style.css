@@ -1,18 +1,4 @@
-@import "@lingo/ui/settings.css";
-
-:root {
-  color-scheme: light dark;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-}
+@import "../../src/settings/page.css";
 
 /* The settings panel as a column in the middle of the tab. */
 

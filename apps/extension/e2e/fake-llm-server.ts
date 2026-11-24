@@ -8,6 +8,8 @@
  *   from `spec/fixtures`: a dictionary entry as JSON when the request asks
  *   for a JSON schema, plain text otherwise. A key of `revoked-key` gets a
  *   401 here, like a key that passed its check and was withdrawn later.
+ * - `GET /page` is the page the tests select text on. `GET /strict-page` is
+ *   the same page under a content security policy that forbids frames.
  * - `GET /requests` returns every request body received so far, so a test can
  *   check what the extension sent. `DELETE /requests` clears the list.
  */
@@ -110,6 +112,18 @@ const server = createServer(async (request, response) => {
   if (request.method === "GET" && path === "/page") {
     response
       .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end(PAGE);
+    return;
+  }
+
+  // The same page, from a site that allows no frames and no outside content.
+  if (request.method === "GET" && path === "/strict-page") {
+    response
+      .writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "content-security-policy":
+          "default-src 'self'; style-src 'unsafe-inline'; frame-src 'none'",
+      })
       .end(PAGE);
     return;
   }

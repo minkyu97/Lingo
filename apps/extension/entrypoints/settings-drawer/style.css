@@ -1,0 +1,13 @@
+@import "../../src/settings/page.css";
+
+/* Shown in place of the settings when the extension did not open this frame. */
+
+.settings-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lingo-space-12);
+  height: 100%;
+  padding: var(--lingo-space-16);
+  background: var(--lingo-bg);
+}

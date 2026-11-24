@@ -7,3 +7,40 @@
   position: fixed;
   z-index: 2147483647;
 }
+
+/* The settings drawer: a panel on the right edge, as tall as the viewport. */
+
+.lingo-drawer {
+  position: fixed;
+  z-index: 2147483647;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--lingo-panel-width);
+  max-width: 100vw;
+  border-left: 1px solid var(--lingo-border);
+  background: var(--lingo-bg);
+  box-shadow: var(--lingo-shadow-panel);
+  animation: lingo-drawer-in 160ms ease-out;
+}
+
+.lingo-drawer iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  /* Lets the settings follow the system theme, whatever the page declares. */
+  color-scheme: light dark;
+}
+
+@keyframes lingo-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lingo-drawer {
+    animation: none;
+  }
+}

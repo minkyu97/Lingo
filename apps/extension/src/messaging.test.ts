@@ -73,13 +73,20 @@ describe("parseLookupRequest", () => {
 
 describe("isRuntimeMessage", () => {
   it("recognizes the known messages", () => {
-    expect(isRuntimeMessage({ type: "open-settings" })).toBe(true);
     expect(isRuntimeMessage({ type: "lookup-selection" })).toBe(true);
+    expect(isRuntimeMessage({ type: "settings-drawer-grant" })).toBe(true);
+    for (const action of ["open", "close", "toggle"]) {
+      expect(isRuntimeMessage({ type: "settings-drawer", action })).toBe(true);
+    }
   });
 
   it("rejects everything else", () => {
     expect(isRuntimeMessage({ type: "nope" })).toBe(false);
-    expect(isRuntimeMessage("open-settings")).toBe(false);
+    expect(isRuntimeMessage("lookup-selection")).toBe(false);
+    expect(isRuntimeMessage({ type: "settings-drawer" })).toBe(false);
+    expect(isRuntimeMessage({ type: "settings-drawer", action: "x" })).toBe(
+      false,
+    );
     expect(isRuntimeMessage(null)).toBe(false);
   });
 

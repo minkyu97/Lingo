@@ -188,7 +188,9 @@ export function LookupApp({ host }: { host: Element }) {
   }, [lookUp]);
 
   const openSettings = () => {
-    const message: RuntimeMessage = { type: "open-settings" };
+    // The drawer belongs to the top frame, and this may be a frame inside
+    // it, so the background passes the request on.
+    const message: RuntimeMessage = { type: "settings-drawer", action: "open" };
     void browser.runtime.sendMessage(message).catch(() => {});
   };
 

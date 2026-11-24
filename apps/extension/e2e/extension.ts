@@ -38,6 +38,13 @@ export const test = base.extend<Fixtures>({
         `--load-extension=${EXTENSION}`,
       ],
     });
+    // A new install opens the settings in a tab, at a moment of its own
+    // choosing. Close it, so that a test decides which tab is in front.
+    const isSettings = (page: Page) => page.url().includes("options.html");
+    await expect
+      .poll(() => context.pages().some(isSettings), { timeout: 15_000 })
+      .toBe(true);
+    await context.pages().find(isSettings)?.close();
     await use(context);
     await context.close();
   },
@@ -65,6 +72,62 @@ export { expect };
 export interface TabsApi {
   query(filter: object): Promise<{ id?: number }[]>;
   sendMessage(tabId: number, message: unknown): Promise<unknown>;
+}
+
+interface ActionApi {
+  onClicked: { dispatch(tab: { id?: number }): void };
+}
+
+/**
+ * Presses the extension's toolbar button while `page` is the tab in front.
+ * Playwright cannot reach the toolbar, so this fires the event that a press
+ * fires, and the extension's own listener takes it from there.
+ */
+export async function pressToolbarButton(page: Page, worker: Worker) {
+  await page.bringToFront();
+  await worker.evaluate(async () => {
+    const { tabs, action } = (
+      globalThis as unknown as { chrome: { tabs: TabsApi; action: ActionApi } }
+    ).chrome;
+    const [tab] = await tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tab) throw new Error("No tab is in front");
+    action.onClicked.dispatch(tab);
+  });
+}
+
+/**
+ * Waits until the extension answers messages in `page`. Its element is in
+ * the page a moment before its listeners are attached.
+ */
+export async function waitUntilListening(page: Page, worker: Worker) {
+  await page.bringToFront();
+  await expect(async () => {
+    await worker.evaluate(async () => {
+      const { tabs } = (globalThis as unknown as { chrome: { tabs: TabsApi } })
+        .chrome;
+      const [tab] = await tabs.query({ active: true, lastFocusedWindow: true });
+      if (tab?.id === undefined) throw new Error("No tab is in front");
+      // Does nothing without a selection, and fails when nobody listens.
+      await tabs.sendMessage(tab.id, { type: "lookup-selection" });
+    });
+  }).toPass({ timeout: 10_000 });
+}
+
+/** The settings as they show inside a page: an extension page in an iframe. */
+export const drawer = (page: Page) =>
+  page.frameLocator('iframe[title="Lingo settings"]');
+
+/** The element that holds the drawer, which is there only while it is open. */
+export const drawerFrame = (page: Page) =>
+  page.locator('iframe[title="Lingo settings"]');
+
+/** Opens the test page and waits until the extension is running in it. */
+export async function openTestPage(context: BrowserContext, path = "/page") {
+  const page = await context.newPage();
+  await page.goto(`${SERVER}${path}`);
+  // The content script mounts after the page has loaded.
+  await page.locator("lingo-ui").waitFor({ state: "attached" });
+  return page;
 }
 
 export interface RecordedRequest {
@@ -168,10 +231,7 @@ export async function selectWord(page: Page, word: string) {
 
 /** Opens the test page and selects one word on it. */
 export async function openPageAndSelect(context: BrowserContext, word: string) {
-  const page = await context.newPage();
-  await page.goto(`${SERVER}/page`);
-  // The content script mounts after the page has loaded.
-  await page.locator("lingo-ui").waitFor({ state: "attached" });
+  const page = await openTestPage(context);
   await selectWord(page, word);
   return page;
 }

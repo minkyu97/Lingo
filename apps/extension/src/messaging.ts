@@ -75,8 +75,22 @@ export const LOOKUP_COMMAND = "lookup-selection";
 const MAX_API_KEY_CHARS = 1000;
 
 const runtimeMessageSchema = z.discriminatedUnion("type", [
-  /** Content script to background. */
-  z.object({ type: z.literal("open-settings") }),
+  /**
+   * Opens, closes, or toggles the settings drawer of a tab. The lookup card
+   * and the drawer itself send it to the background, which passes it on to
+   * the top frame of their tab. The background also sends it on its own when
+   * the toolbar button is pressed. The top frame answers with a
+   * `DrawerAnswer`.
+   */
+  z.object({
+    type: z.literal("settings-drawer"),
+    action: z.enum(["open", "close", "toggle"]),
+  }),
+  /**
+   * The page inside the drawer to background: was this drawer opened by the
+   * extension just now? The answer is `true` or `false`.
+   */
+  z.object({ type: z.literal("settings-drawer-grant") }),
   /** Background to content script, when the keyboard shortcut is pressed. */
   z.object({ type: z.literal("lookup-selection") }),
   /**
@@ -115,3 +129,13 @@ export const keyCheckResultSchema = z
   .catch("unreachable");
 
 export type KeyCheckResult = z.infer<typeof keyCheckResultSchema>;
+
+/** What the top frame did with a `settings-drawer` message. */
+export const drawerAnswerSchema = z.enum(["opened", "closed", "unchanged"]);
+
+export type DrawerAnswer = z.infer<typeof drawerAnswerSchema>;
+
+export type DrawerAction = Extract<
+  RuntimeMessage,
+  { type: "settings-drawer" }
+>["action"];

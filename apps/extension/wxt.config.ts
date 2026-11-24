@@ -15,6 +15,13 @@ export default defineConfig({
       "https://api.anthropic.com/*",
       "https://api.openai.com/*",
     ],
+    // No popup: pressing the toolbar button opens the settings in the page.
+    action: { default_title: "Lingo settings" },
+    // The page shown inside the in-page settings drawer. A web page can only
+    // hold an extension page in an iframe when it is listed here.
+    web_accessible_resources: [
+      { resources: ["settings-drawer.html"], matches: ["<all_urls>"] },
+    ],
     commands: {
       "lookup-selection": {
         suggested_key: { default: "Alt+Shift+L" },

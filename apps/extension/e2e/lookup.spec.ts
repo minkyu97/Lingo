@@ -3,6 +3,7 @@
  * in-page panel.
  */
 import {
+  drawer,
   expect,
   expectFinishedEntry,
   openPageAndSelect,
@@ -147,9 +148,11 @@ test("explains a rejected key and leads back to settings", async ({
   await expect(panel(page)).toContainText("rejected your API key");
   await page.screenshot({ path: testInfo.outputPath("error.png") });
 
-  const opened = context.waitForEvent("page");
+  // The settings open in the same page, where the key can be corrected.
   await panel(page).getByRole("button", { name: "Open settings" }).click();
-  await expect((await opened).url()).toContain("options.html");
+  await expect(
+    drawer(page).getByRole("button", { name: /^Translation engine/ }),
+  ).toContainText("Claude Opus 5.5");
 });
 
 test("asks for a key before the first lookup", async ({ context }) => {

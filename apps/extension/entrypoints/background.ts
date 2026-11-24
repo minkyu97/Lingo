@@ -10,6 +10,7 @@ import {
   LOOKUP_PORT,
   type RuntimeMessage,
 } from "../src/messaging.ts";
+import { createSettingsDrawer } from "../src/settings-drawer.ts";
 import {
   loadApiKey,
   loadSettings,
@@ -43,16 +44,35 @@ export default defineBackground(() => {
     });
   });
 
+  const drawer = createSettingsDrawer({
+    sendToTopFrame: (tabId, message) =>
+      browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+    openOptionsPage: () => browser.runtime.openOptionsPage(),
+  });
+
+  // The toolbar button opens the settings inside the current page. There is
+  // no popup, which is what makes this event fire.
+  browser.action.onClicked.addListener((tab) => {
+    void drawer.request(tab.id, "toggle");
+  });
+
   browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!isRuntimeMessage(message)) return;
+    // The extension's own pages, as opposed to a content script, which runs
+    // inside a web page.
+    const fromOwnPage =
+      sender.url?.startsWith(browser.runtime.getURL("/")) ?? false;
+
     switch (message.type) {
-      case "open-settings":
-        void browser.runtime.openOptionsPage();
+      case "settings-drawer":
+        void drawer.request(sender.tab?.id, message.action);
+        return;
+      case "settings-drawer-grant":
+        sendResponse(fromOwnPage && drawer.claimGrant(sender.tab?.id));
         return;
       case "check-api-key":
-        // Only the extension's own pages have a key to check. A content
-        // script runs inside a web page, so it is not answered.
-        if (!sender.url?.startsWith(browser.runtime.getURL("/"))) return;
+        // Only the extension's own pages have a key to check.
+        if (!fromOwnPage) return;
         void checkApiKey(message.provider, message.apiKey, {
           createProvider,
           baseURL,
