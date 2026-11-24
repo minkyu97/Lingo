@@ -3,6 +3,7 @@ import { PROVIDERS } from "@lingo/providers/catalog";
 import { type KeyStatus, SettingsPanel } from "@lingo/ui";
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
+import { requestKeyCheck } from "../key-check.ts";
 import { LOOKUP_COMMAND } from "../messaging.ts";
 import {
   type ApiKeys,
@@ -27,7 +28,8 @@ export interface SettingsAppProps {
 
 /**
  * The settings panel connected to the extension: it shows what is in storage
- * and stores each change as it is made. It runs only in the extension's own
+ * and stores each change as it is made, except that an API key is stored only
+ * after its provider has accepted it. It runs only in the extension's own
  * pages, never in a content script, because it reads the API keys.
  */
 export function SettingsApp({ onClose }: SettingsAppProps) {
@@ -36,6 +38,8 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
   const [shortcut, setShortcut] = useState("");
   const [keyStatus, setKeyStatus] = useState<KeyStatus>("idle");
   const savedNotice = useRef<ReturnType<typeof setTimeout>>(undefined);
+  /** Counts key submissions, so that only the latest one reports back. */
+  const submission = useRef(0);
 
   useEffect(() => {
     void loadSettings().then(setSettings);
@@ -51,7 +55,10 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
 
   const changeSettings = (next: Settings) => {
     // What is said about one provider's key does not apply to another's.
-    if (next.provider !== settings.provider) showKeyStatus("idle");
+    if (next.provider !== settings.provider) {
+      submission.current += 1;
+      showKeyStatus("idle");
+    }
     setSettings(next);
     void saveSettings(next);
   };
@@ -67,12 +74,31 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
     }
   }
 
-  async function submitApiKey(provider: ProviderId, key: string) {
-    const next = { ...apiKeys, [provider]: key };
-    await saveApiKeys(next);
+  async function storeApiKey(provider: ProviderId, key: string) {
+    await saveApiKeys({ ...(await loadApiKeys()), [provider]: key });
     setApiKeys(await loadApiKeys());
-    // Removing a key needs no confirmation: the empty field shows it.
-    showKeyStatus(key ? "saved" : "idle");
+  }
+
+  /**
+   * A key is stored only once its provider has accepted it. An empty key
+   * removes the stored one, which needs no check.
+   */
+  async function submitApiKey(provider: ProviderId, key: string) {
+    submission.current += 1;
+    const id = submission.current;
+    const report = (status: KeyStatus) => {
+      if (id === submission.current) showKeyStatus(status);
+    };
+
+    if (!key) {
+      await storeApiKey(provider, "");
+      report("idle");
+      return;
+    }
+    report("checking");
+    const result = await requestKeyCheck(provider, key);
+    if (result === "accepted") await storeApiKey(provider, key);
+    report(result === "accepted" ? "saved" : result);
   }
 
   return (

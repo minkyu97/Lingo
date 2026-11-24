@@ -2,6 +2,7 @@ import type { ProviderId } from "@lingo/core";
 import { createProvider } from "@lingo/providers";
 import { browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
+import { checkApiKey } from "../src/key-check.ts";
 import { handleLookupPort } from "../src/lookup-handler.ts";
 import {
   isRuntimeMessage,
@@ -30,7 +31,7 @@ function baseURL(provider: ProviderId): string | undefined {
 export default defineBackground(() => {
   void restrictStorageToTrustedContexts();
 
-  // API keys are read and provider calls are made here only, never in a
+  // API keys are used and provider calls are made here only, never in a
   // content script.
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== LOOKUP_PORT) return;
@@ -42,9 +43,22 @@ export default defineBackground(() => {
     });
   });
 
-  browser.runtime.onMessage.addListener((message) => {
-    if (isRuntimeMessage(message) && message.type === "open-settings") {
-      void browser.runtime.openOptionsPage();
+  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!isRuntimeMessage(message)) return;
+    switch (message.type) {
+      case "open-settings":
+        void browser.runtime.openOptionsPage();
+        return;
+      case "check-api-key":
+        // Only the extension's own pages have a key to check. A content
+        // script runs inside a web page, so it is not answered.
+        if (!sender.url?.startsWith(browser.runtime.getURL("/"))) return;
+        void checkApiKey(message.provider, message.apiKey, {
+          createProvider,
+          baseURL,
+        }).then(sendResponse);
+        // Keeps the channel open until the provider has answered.
+        return true;
     }
   });
 
