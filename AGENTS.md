@@ -40,7 +40,7 @@ Code:
 
 - `packages/core`: `@lingo/core`. Domain types, ports, and use cases in plain TypeScript, with no platform or provider dependencies.
 - `packages/providers`: `@lingo/providers`. LLM adapters for Anthropic and OpenAI behind the core's `LLMProvider` port, and the list of models offered in settings.
-- `packages/ui`: `@lingo/ui`. React components and styles shared by the extension and, later, the desktop app.
+- `packages/ui`: `@lingo/ui`. The design system as code: design tokens, controls, the lookup popup, and the settings panel, as React components and styles shared by the extension and, later, the desktop app.
 - `apps/extension`: `@lingo/extension`. The browser extension, built with WXT. Entry points are in `entrypoints/`, logic and unit tests in `src/`, end-to-end tests in `e2e/`, and the build output goes to `.output/`.
 - `spec/`: `@lingo/spec`. Prompt templates and test vectors as data, shared by every implementation of the core.
 

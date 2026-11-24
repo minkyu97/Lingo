@@ -33,7 +33,7 @@ Lingo/
 ├─ packages/
 │  ├─ core/        @lingo/core: domain types, the LLM port, prompt builder, lookup use case
 │  ├─ providers/   @lingo/providers: Anthropic and OpenAI adapters, model catalog
-│  └─ ui/          @lingo/ui: React components shared by the extension and the desktop app
+│  └─ ui/          @lingo/ui: design tokens and React components shared by the extension and the desktop app
 ├─ apps/
 │  ├─ extension/   @lingo/extension: WXT app for Chrome, Safari later
 │  ├─ desktop/     planned: Tauri 2 for macOS and Windows
@@ -50,16 +50,16 @@ Releases are tagged per surface: `ext-v*`, `desktop-v*`, `ios-v*`.
 
 `packages/core` holds the domain and defines the ports. It has no platform or provider code: its only dependencies are `@lingo/spec`, which is data, and Zod, for validation. Its `tsconfig.json` leaves the DOM library out, so page and browser APIs do not type-check there.
 
-| Module            | What it holds                                                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `context.ts`      | `CapturedContext` and `ContextLevel`; `clampContext` and `withoutContext`                                                 |
-| `llm.ts`          | The `LLMProvider` port, `ChatRequest` with its optional JSON `format`, and `LLMError` with its kinds                      |
-| `prompt.ts`       | `buildLookupRequest`: a system prompt from `spec/prompts.json` plus the user message, and the JSON format for definitions |
-| `dictionary.ts`   | `DictionaryEntry` and its schema, `parseDictionaryEntry` for a complete or still-streaming answer, and sense grouping     |
-| `partial-json.ts` | `parsePartialJson`: reads as much of a JSON document as has arrived so far                                                |
-| `mode.ts`         | `chooseMode`: define a word or short phrase, translate anything longer                                                    |
-| `settings.ts`     | `Settings`, its defaults, `normalizeSettings` with its schema, and the offered target languages                           |
-| `lookup.ts`       | `prepareLookup`: the use case that applies the settings to a captured context and builds the request                      |
+| Module            | What it holds                                                                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `context.ts`      | `CapturedContext` and `ContextLevel`; `clampContext` and `withoutContext`                                                                     |
+| `llm.ts`          | The `LLMProvider` port (streaming an answer, checking a key), `ChatRequest` with its optional JSON `format`, and `LLMError` with its kinds    |
+| `prompt.ts`       | `buildLookupRequest`: a system prompt from `spec/prompts.json` plus the user message, and the JSON format for definitions                     |
+| `dictionary.ts`   | `DictionaryEntry` and its schema, `parseDictionaryEntry` for a complete or still-streaming answer, and sense grouping                         |
+| `partial-json.ts` | `parsePartialJson`: reads as much of a JSON document as has arrived so far                                                                    |
+| `mode.ts`         | `chooseMode`: define a word or short phrase, translate anything longer                                                                        |
+| `settings.ts`     | `Settings`, its defaults, `normalizeSettings` with its schema, the offered target languages with their names, and the offered context lengths |
+| `lookup.ts`       | `prepareLookup`: the use case that applies the settings to a captured context and builds the request                                          |
 
 Each app supplies the adapters:
 
@@ -91,6 +91,8 @@ interface LLMProvider {
     request: ChatRequest,
     options?: { signal?: AbortSignal },
   ): AsyncIterable<string>;
+  // Resolves when the provider accepts the API key. Generates nothing.
+  checkKey(): Promise<void>;
 }
 
 type LLMErrorKind =
@@ -111,6 +113,7 @@ Data that arrives without a trustworthy type goes through a Zod schema, and the 
 | Data                           | Schema                            | On bad input                                                        |
 | ------------------------------ | --------------------------------- | ------------------------------------------------------------------- |
 | Messages from a content script | `apps/extension/src/messaging.ts` | The message is rejected. Optional fields that are wrong are dropped |
+| Answers to a message           | `apps/extension/src/messaging.ts` | An unexpected answer, or none, reads as "could not be done"         |
 | Stored settings                | `normalizeSettings` in `core`     | Each wrong field falls back to its default                          |
 | Stored API keys and model IDs  | `perProviderTextSchema` in `core` | Wrong entries are left out                                          |
 | A model's dictionary entry     | `packages/core/src/dictionary.ts` | Each missing or wrong field reads as empty                          |
@@ -121,7 +124,7 @@ Not everything typed `unknown` needs a schema:
 
 - `parsePartialJson` is a parser. Its result is what the dictionary schema checks.
 - The adapters classify a thrown error by the SDK's error classes, which is not a question of shape.
-- Events from the background to a content script are typed but not checked, because the sender is the extension itself.
+- Events from the background to a content script over the lookup port are typed but not checked, because the sender is the extension itself.
 
 ### Use cases
 
@@ -181,6 +184,23 @@ The user message is assembled by code:
 
 `spec/prompt-cases.json` pins these rules as golden cases. The TypeScript core runs all of them, and the Swift port must pass the same file.
 
+## Shared UI
+
+`packages/ui` holds the design system as code: tokens, controls, and the two things built from them. It uses no browser extension API, so the desktop app can render the same components.
+
+| Path            | What it holds                                                                                                                                 |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/styles/`   | `tokens.css` (color, space, radius, shadow, and type, as CSS custom properties with light and dark values) and one stylesheet per group below |
+| `src/controls/` | Button, text button, icon button, segmented control, switch, badge, callout, text field, search field, messages                               |
+| `src/lookup/`   | `LookupCard`, `DictionaryEntryView`, and `LookupTrigger`                                                                                      |
+| `src/settings/` | `SettingsPanel`: a list of settings and a screen for each one that needs more than a row                                                      |
+| `src/Logo.tsx`  | The logo, an apple, with and without a face                                                                                                   |
+
+- **Tokens.** Every component tree starts at an element with the class `lingo`, which sets the tokens. Their names and values mirror the variables of the Lingo design file, so a design and its implementation use the same words.
+- **Two stylesheets.** `@lingo/ui/lookup.css` and `@lingo/ui/settings.css` each bring the tokens and the controls. The content script, which is injected into every page, imports only the first.
+- **Icons** come from `lucide-react`, drawn at the design's stroke weight by the `Icon` component.
+- **No state of its own.** `SettingsPanel` is given the settings and reports each change. The app stores them, which is why there is no Save button to wire up.
+
 ## Bring your own key
 
 Lingo is free and open source with no subscription, so users supply their own provider keys and pay inference costs directly. There is no Lingo backend; every surface calls the provider API itself.
@@ -196,6 +216,8 @@ Lingo is free and open source with no subscription, so users supply their own pr
 Extension rules, as implemented:
 
 - Content scripts never hold the key and never read storage. They send the selection and context to the background over a port.
+- The key is typed and shown only in the extension's own pages: the settings in a tab, or the same settings in an iframe inside a web page. Neither the page nor the content script that draws the iframe can read into it.
+- A key is stored only after its provider has accepted it. The settings page hands the key to the background, which asks the provider, so the settings page bundles no provider SDK. A key the provider refuses, or that could not be checked, is not stored.
 - On startup the background calls `storage.local.setAccessLevel("TRUSTED_CONTEXTS")`, so only the background and the extension's own pages can read storage. Chrome applies this to `storage.local` from version 140, which is why the manifest sets `minimum_chrome_version` to 140 ([Chrome](https://developer.chrome.com/docs/extensions/reference/api/storage)).
 - The background validates every message from a content script with a Zod schema before using it, and chooses the provider URL itself.
 - Keys are stored in `storage.local`, never in synced storage.
@@ -230,6 +252,8 @@ What the OpenAI adapter does, confirmed the same way:
 - Requests stream through the Responses API with `store: false`, so the user's text is not kept on OpenAI's side.
 - When a request has a `format`, its schema is sent as `text.format` with `strict: true`.
 
+Checking a key, in both adapters: `checkKey` lists the provider's models, which needs a valid key and generates nothing, so it costs nothing. It waits 10 seconds and tries again once at most, because someone is watching a spinner. A refusal becomes an `LLMError` of kind `auth`; any other failure leaves the question open. A live run of `pnpm smoke` confirmed on 2026-11-24 that both providers accept a real key and refuse a made-up one this way.
+
 Not done yet: prompt caching. It matters for page translation, where many requests share a prefix. It needs a shared prefix of at least 512 tokens on current Claude models, so the short lookup prompts would not benefit.
 
 There is no official Anthropic SDK for Swift, so the iOS port calls the HTTP API directly. The recorded streams in `spec/fixtures` are its test vectors.
@@ -240,7 +264,7 @@ Local servers may need origin configuration before they accept requests from an 
 
 ### Browser extension
 
-Implemented: translate or define the selection, through an in-page floating button or a keyboard shortcut, with a settings page.
+Implemented: translate or define the selection, through an in-page floating button or a keyboard shortcut, in a popup that can be moved and pinned; and settings that open in a panel inside the page.
 
 Planned: chat refinement, full-page translation, Safari.
 
@@ -251,27 +275,47 @@ How a lookup flows:
 3. The content script opens a port named `lingo:lookup` to the background and sends `{ type: "start", mode, context }`.
 4. `src/lookup-handler.ts` in the background validates the message, loads the settings and the key, calls `prepareLookup`, and streams from the provider.
 5. Events come back over the port: `started` (with the context that was actually sent), `delta` for each chunk, then `done` or `error`. A `ping` every 20 seconds keeps the service worker alive while the provider is silent, because Chrome stops a worker after 30 idle seconds.
-6. The panel renders the shared `LookupCard` from `@lingo/ui`, which shows a translation as text and a definition as a dictionary entry. Closing the port, by closing the panel or leaving the page, cancels the request.
+6. The popup renders the shared `LookupCard` from `@lingo/ui`, which shows a translation as text and a definition as a dictionary entry. Closing the port, by closing the popup or leaving the page, cancels the request.
+
+The popup:
+
+- **Moving.** Dragging the header moves the popup; six dots in the middle of the header say so. A moved popup stays where it was put, also when its mode is switched.
+- **Pinning.** A popup normally closes on Escape or on a click outside it. While pinned it closes only from its Close button, and a new lookup shows in it where it already is. There is one popup per frame at a time.
+
+How the settings open:
+
+1. The toolbar button has no popup, so pressing it fires `action.onClicked` in the background.
+2. The background asks the top frame of that tab to toggle its settings drawer (`src/settings-drawer.ts`). When no content script answers, as on a browser page or in a tab that was open before the extension was installed, it opens the settings in a tab instead.
+3. The content script draws the drawer: a panel on the right edge of the page that holds an iframe of `settings-drawer.html`, an extension page.
+4. That page asks the background whether a drawer was just opened in its tab, and shows the settings only if so. See "The settings drawer" below for why.
+5. The drawer closes on a second press of the toolbar button, on Escape, or from its Close button. The lookup popup's "Open settings" button opens the same drawer.
+
+The settings have no Save button. Each change is stored as it is made, except an API key, which is stored once its provider has accepted it.
 
 Where things are in `apps/extension`:
 
 | Path                                          | Role                                                                                                                                   |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `entrypoints/background.ts`                   | Registers listeners: the lookup port, the shortcut, and opening settings                                                               |
-| `entrypoints/content/`                        | Selection detection, the button, and the panel, mounted in a shadow root                                                               |
-| `entrypoints/options/`                        | The settings page                                                                                                                      |
-| `src/messaging.ts`                            | The message types shared by content script and background, and their validation                                                        |
+| `entrypoints/background.ts`                   | Registers listeners: the lookup port, the shortcut, the toolbar button, key checks, and the settings drawer                            |
+| `entrypoints/content/`                        | Selection detection, the button, the popup, and the settings drawer, mounted in a shadow root                                          |
+| `entrypoints/options/`                        | The settings as a page of their own, in a tab                                                                                          |
+| `entrypoints/settings-drawer/`                | The settings as shown inside the in-page drawer                                                                                        |
+| `src/settings/`                               | `SettingsApp`: the shared settings panel connected to storage and to the background. Both settings pages render it                     |
+| `src/messaging.ts`                            | The message types shared by the content script, the pages, and the background, and their validation                                    |
 | `src/lookup-handler.ts`                       | The background side of a lookup, written against a small port interface so it is tested without a browser                              |
-| `src/lookup-client.ts`, `src/lookup-state.ts` | The content-script side: opening the port, and folding events into panel state                                                         |
+| `src/lookup-client.ts`, `src/lookup-state.ts` | The content-script side: opening the port, and folding events into popup state                                                         |
+| `src/key-check.ts`                            | Checking an API key: the background side, which asks the provider, and the settings side, which asks the background                    |
+| `src/settings-drawer.ts`                      | The background side of the drawer: passing requests to the top frame, falling back to a tab, and the grant for the page in the drawer  |
 | `src/context/dom.ts`                          | DOM context capture                                                                                                                    |
 | `src/stores.ts`                               | Settings and key storage                                                                                                               |
-| `src/position.ts`                             | Where the button and the panel go. The panel opens below the selection or above it, and its height is limited to the room on that side |
-| `e2e/`                                        | Playwright tests and the fake LLM server they run against                                                                              |
+| `src/position.ts`, `src/drag.ts`              | Where the button and the popup go. The popup opens below the selection or above it, or where it was dragged, and stays in the viewport |
+| `e2e/`                                        | Playwright tests, the helpers they share, and the fake LLM server they run against                                                     |
 
 Design points:
 
 - **Shadow root.** The UI is mounted with WXT's `createShadowRootUi`, and its styles are injected into the shadow root, so page styles and Lingo's styles cannot affect each other. Sizes are in px, because rem would follow the page's root font size.
-- **All frames.** The content script runs in every frame, since a frame only sees its own selection. The UI appears in the frame that holds the selection.
+- **All frames.** The content script runs in every frame, since a frame only sees its own selection. The popup appears in the frame that holds the selection. The settings drawer belongs to the top frame only.
+- **The settings drawer.** The settings hold an API key, so they are an extension page in an iframe and not part of the content script's own UI. A web page can only hold an extension page in an iframe when it is listed in `web_accessible_resources`, and that lets any page do so, for instance to trick someone into pressing things in it. So the background notes the tab each time it opens a drawer, and the page inside shows the settings only when the background confirms it, once, within ten seconds. Any other frame shows a button that opens the settings in a tab. Only `settings-drawer.html` is listed; the options page cannot be framed. A page's content security policy does not stop the drawer: an end-to-end test opens it under `frame-src 'none'`.
 - **Context edge cases.** Selections in text fields are read through the field's own selection API. Context is not captured in the built-in PDF viewer, in canvas editors such as Google Docs, or inside closed shadow roots; lookups there send the selection only. See the [research](research/context-awareness.md#browser-extension-chrome-mv3).
 - **Explicit imports.** WXT's auto-imports are off. They would also rewrite the workspace packages that the app consumes as source.
 - **End-to-end build.** `wxt build --mode e2e` reads `.env.e2e`, which points the adapters at the fake server. The production build has no such override.
@@ -356,7 +400,7 @@ Deferred. `ACTION_PROCESS_TEXT` provides the selected text only, so the feature 
 ## Roadmap
 
 1. **Foundation and extension MVP.** In progress.
-   - Done: the workspace, `core`, `providers`, `ui`, CI, and the extension's selection lookup (translate and define with context).
+   - Done: the workspace, `core`, `providers`, `ui`, CI, the extension's selection lookup (translate and define with context) in a popup that can be moved and pinned, and settings that open inside the page.
    - Next: chat refinement, then page translation.
 2. **Desktop spike (one week).** On both macOS and Windows: hotkey → selection and paragraph → a panel that leaves focus in the source app. Outcome: stay on Tauri or switch to Electron.
 3. **Desktop MVP.**
@@ -365,14 +409,17 @@ Deferred. `ACTION_PROCESS_TEXT` provides the selected text only, so the feature 
 
 ## Open risks
 
-| Risk                                                                                                  | Plan                                                                                                                                      |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Tauri cannot deliver a focus-preserving panel on Windows                                              | The desktop spike; Electron fallback                                                                                                      |
-| The macOS panel depends on a single-maintainer plugin                                                 | Same spike; the plugin is small enough to fork or replace                                                                                 |
-| Accessibility coverage is lower than estimated in key apps                                            | Measure during the spike; selection-only fallback always works                                                                            |
-| Safari kills the background script mid-request                                                        | Short requests, resumable page translation                                                                                                |
-| App Store rejects a bring-your-own-key app                                                            | Build the iOS app last; keep the extension and desktop independent of it                                                                  |
-| Default-translation extension limits are undocumented                                                 | Prototype early in step 4                                                                                                                 |
-| The content script loads React and Zod into every frame of every page, about 330 kB                   | Measure the effect on page load. If it matters, load the UI on first use, switch to a lighter renderer, or move the schemas to `zod/mini` |
-| Automated tests do not press the real Chrome shortcut or call a real provider from the service worker | Check both by hand before a release. `pnpm smoke` covers the adapters against the real APIs from Node                                     |
-| A content script on every page lengthens Chrome Web Store review                                      | Accepted: the button has to appear wherever text is selected                                                                              |
+| Risk                                                                                                                                     | Plan                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tauri cannot deliver a focus-preserving panel on Windows                                                                                 | The desktop spike; Electron fallback                                                                                                                  |
+| The macOS panel depends on a single-maintainer plugin                                                                                    | Same spike; the plugin is small enough to fork or replace                                                                                             |
+| Accessibility coverage is lower than estimated in key apps                                                                               | Measure during the spike; selection-only fallback always works                                                                                        |
+| Safari kills the background script mid-request                                                                                           | Short requests, resumable page translation                                                                                                            |
+| App Store rejects a bring-your-own-key app                                                                                               | Build the iOS app last; keep the extension and desktop independent of it                                                                              |
+| Default-translation extension limits are undocumented                                                                                    | Prototype early in step 4                                                                                                                             |
+| The content script loads React and Zod into every frame of every page, about 340 kB                                                      | Measure the effect on page load. If it matters, load the UI on first use, switch to a lighter renderer, or move the schemas to `zod/mini`             |
+| Automated tests do not press the real Chrome shortcut or toolbar button, or call a real provider from the service worker                 | Check these by hand before a release. The tests fire the events those presses fire. `pnpm smoke` covers the adapters against the real APIs from Node  |
+| A web page can imitate the settings drawer to ask for a key, or cover the real one                                                       | Accepted for now. A page cannot read the real drawer or the stored key, but nothing stops it from drawing a fake one. Revisit before a public release |
+| The toolbar button opens the settings in a tab, not in the page, while a page is still loading                                           | Accepted: the settings still open. The content script starts when the page is idle                                                                    |
+| Claude Opus 5.5 at low effort once wrote its reasoning into a translation, inside `<thinking>` tags (seen in `pnpm smoke` on 2026-11-24) | Not fixed. Find out how often it happens, then tighten the translate prompt or strip the tags, and make the smoke check fail on it                    |
+| A content script on every page lengthens Chrome Web Store review                                                                         | Accepted: the button has to appear wherever text is selected                                                                                          |
