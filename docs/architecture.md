@@ -246,7 +246,7 @@ Planned: chat refinement, full-page translation, Safari.
 
 How a lookup flows:
 
-1. The content script (`entrypoints/lookup.content`) sees a new selection on `mouseup` and shows a small button next to it. The keyboard shortcut (`Alt+Shift+L` by default) skips the button: the background receives the command and messages the tab.
+1. The content script (`entrypoints/content`) sees a new selection on `mouseup` and shows a small button next to it. The keyboard shortcut (`Alt+Shift+L` by default) skips the button: the background receives the command and messages the tab.
 2. `src/context/dom.ts` captures the selection, the text of its enclosing block, the page title, and the URL without its query string.
 3. The content script opens a port named `lingo:lookup` to the background and sends `{ type: "start", mode, context }`.
 4. `src/lookup-handler.ts` in the background validates the message, loads the settings and the key, calls `prepareLookup`, and streams from the provider.
@@ -258,7 +258,7 @@ Where things are in `apps/extension`:
 | Path                                          | Role                                                                                                                                   |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `entrypoints/background.ts`                   | Registers listeners: the lookup port, the shortcut, and opening settings                                                               |
-| `entrypoints/lookup.content/`                 | Selection detection, the button, and the panel, mounted in a shadow root                                                               |
+| `entrypoints/content/`                        | Selection detection, the button, and the panel, mounted in a shadow root                                                               |
 | `entrypoints/options/`                        | The settings page                                                                                                                      |
 | `src/messaging.ts`                            | The message types shared by content script and background, and their validation                                                        |
 | `src/lookup-handler.ts`                       | The background side of a lookup, written against a small port interface so it is tested without a browser                              |

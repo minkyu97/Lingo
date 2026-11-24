@@ -164,7 +164,7 @@ async function openPageAndSelect(context: BrowserContext, word: string) {
   const page = await context.newPage();
   await page.goto(`${SERVER}/page`);
   // The content script mounts after the page has loaded.
-  await page.locator("lingo-lookup").waitFor({ state: "attached" });
+  await page.locator("lingo-ui").waitFor({ state: "attached" });
   await selectWord(page, word);
   return page;
 }

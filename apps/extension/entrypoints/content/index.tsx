@@ -15,7 +15,7 @@ export default defineContentScript({
     if (!document.body) return;
 
     const ui = await createShadowRootUi(ctx, {
-      name: "lingo-lookup",
+      name: "lingo-ui",
       position: "inline",
       anchor: "body",
       onMount(container, _shadow, host) {
