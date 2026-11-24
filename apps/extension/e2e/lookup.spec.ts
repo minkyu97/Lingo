@@ -1,7 +1,7 @@
 /**
  * Drives the built extension in a real browser against the fake LLM server:
- * save a key in the options page, select text on a page, and read the answer
- * in the in-page panel.
+ * enter a key in the settings, select text on a page, and read the answer in
+ * the in-page panel.
  */
 import { fileURLToPath } from "node:url";
 import {
@@ -80,17 +80,57 @@ test.beforeEach(async ({ request }) => {
   await request.delete(`${SERVER}/requests`);
 });
 
-async function saveSettings(
+/** What a test changes in the settings before it looks something up. */
+interface Setup {
+  /** The provider to switch to. Anthropic is the default. */
+  provider?: "OpenAI";
+  apiKey: string;
+  /** The English name of the language to translate into. */
+  language?: string;
+  /** `false` turns context awareness off. */
+  context?: false;
+}
+
+/**
+ * Opens the settings page and changes the settings the way a user would.
+ * There is no Save button: each change is stored as it is made.
+ */
+async function setUp(
   context: BrowserContext,
   extensionId: string,
-  fill: (options: Page) => Promise<void>,
+  setup: Setup,
 ) {
-  const options = await context.newPage();
-  await options.goto(`chrome-extension://${extensionId}/options.html`);
-  await fill(options);
-  await options.getByRole("button", { name: "Save" }).click();
-  await expect(options.getByText("Saved")).toBeVisible();
-  return options;
+  const settings = await context.newPage();
+  await settings.goto(`chrome-extension://${extensionId}/options.html`);
+  const row = (name: string) =>
+    settings.getByRole("button", { name: new RegExp(`^${name}`) });
+  const back = () => settings.getByRole("button", { name: "Back" }).click();
+
+  await row("Translation engine").click();
+  if (setup.provider) {
+    await settings
+      .getByRole("button", { name: setup.provider, exact: true })
+      .click();
+  }
+  await settings.getByLabel("API key").fill(setup.apiKey);
+  await settings.getByLabel("API key").press("Enter");
+  await expect(settings.getByText(/^Saved\./)).toBeVisible();
+  await back();
+
+  if (setup.language) {
+    await row("Translate into").click();
+    await settings
+      .getByRole("radio", { name: new RegExp(setup.language) })
+      .check();
+    await back();
+  }
+  if (setup.context === false) {
+    await row("Context").click();
+    await settings.getByRole("switch").click();
+    await back();
+    await expect(row("Context")).toContainText("Off");
+  }
+  return settings;
 }
 
 const trigger = (page: Page) =>
@@ -142,9 +182,7 @@ test("defines a selected word using its paragraph", async ({
   context,
   extensionId,
 }, testInfo) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "bank");
 
   await trigger(page).click();
@@ -195,9 +233,7 @@ test("switching the mode runs the lookup again", async ({
   context,
   extensionId,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
   await expectFinishedEntry(page);
@@ -221,10 +257,7 @@ test("sends only the selection when context awareness is off", async ({
   context,
   extensionId,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-    await options.getByLabel("Send the text around my selection").uncheck();
-  });
+  await setUp(context, extensionId, { apiKey: "test-key", context: false });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
 
@@ -238,15 +271,14 @@ test("uses OpenAI when it is the chosen provider", async ({
   context,
   extensionId,
 }, testInfo) => {
-  const options = await saveSettings(context, extensionId, async (page) => {
-    await page.getByLabel("OpenAI", { exact: true }).check();
-    await page.getByLabel("OpenAI API key").fill("test-key");
-    await page.getByLabel("Translate into").selectOption("ja");
+  const settings = await setUp(context, extensionId, {
+    provider: "OpenAI",
+    apiKey: "test-key",
+    language: "Japanese",
   });
-  await options.screenshot({
-    path: testInfo.outputPath("options.png"),
-    fullPage: true,
-  });
+  await expect(settings.getByText("GPT-6.2 Sol")).toBeVisible();
+  await expect(settings.getByText("日本語")).toBeVisible();
+  await settings.screenshot({ path: testInfo.outputPath("settings.png") });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
 
@@ -269,10 +301,8 @@ test("explains a rejected key and leads back to settings", async ({
   context,
   extensionId,
 }, testInfo) => {
-  const options = await saveSettings(context, extensionId, async (page) => {
-    await page.getByLabel("Anthropic API key").fill("bad-key");
-  });
-  await options.close();
+  const settings = await setUp(context, extensionId, { apiKey: "bad-key" });
+  await settings.close();
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
 
@@ -296,9 +326,7 @@ test("closes on Escape and on a click outside", async ({
   context,
   extensionId,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
   await expect(panel(page)).toBeVisible();
@@ -317,9 +345,7 @@ test("stays open while pinned, until Close is pressed", async ({
   context,
   extensionId,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
   await expectFinishedEntry(page);
@@ -360,9 +386,7 @@ test("moves when its header is dragged, and stays there", async ({
   context,
   extensionId,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
   await expectFinishedEntry(page);
@@ -402,9 +426,7 @@ test("looks up the selection when the shortcut message arrives", async ({
   extensionId,
   worker,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "boats");
   await page.bringToFront();
 
