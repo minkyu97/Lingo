@@ -1,182 +1,19 @@
 /**
- * Drives the built extension in a real browser against the fake LLM server:
- * enter a key in the settings, select text on a page, and read the answer in
- * the in-page panel.
+ * Looking something up: select text on a page, and read the answer in the
+ * in-page panel.
  */
-import { fileURLToPath } from "node:url";
 import {
-  type BrowserContext,
-  test as base,
-  chromium,
   expect,
-  type Page,
-  type Worker,
-} from "@playwright/test";
-
-const SERVER = "http://127.0.0.1:43117";
-const EXTENSION = fileURLToPath(
-  new URL("../.output/chrome-mv3-e2e", import.meta.url),
-);
-
-interface Fixtures {
-  context: BrowserContext;
-  worker: Worker;
-  extensionId: string;
-}
-
-const test = base.extend<Fixtures>({
-  // biome-ignore lint/correctness/noEmptyPattern: Playwright requires a destructured first argument
-  context: async ({}, use) => {
-    // Extensions need a persistent context, and only the bundled Chromium
-    // still loads unpacked ones from the command line.
-    const context = await chromium.launchPersistentContext("", {
-      channel: "chromium",
-      args: [
-        `--disable-extensions-except=${EXTENSION}`,
-        `--load-extension=${EXTENSION}`,
-      ],
-    });
-    await use(context);
-    await context.close();
-  },
-  worker: async ({ context }, use) => {
-    const worker =
-      context.serviceWorkers()[0] ??
-      (await context.waitForEvent("serviceworker"));
-    await use(worker);
-  },
-  extensionId: async ({ worker }, use) => {
-    await use(new URL(worker.url()).host);
-  },
-});
-
-/** The part of the extension API the shortcut test calls inside the service worker. */
-interface TabsApi {
-  query(filter: object): Promise<{ id?: number }[]>;
-  sendMessage(tabId: number, message: unknown): Promise<unknown>;
-}
-
-interface RecordedRequest {
-  path: string;
-  body: {
-    model: string;
-    system?: string;
-    instructions?: string;
-    fallbacks?: string;
-    messages?: { role: string; content: string }[];
-    input?: { role: string; content: string }[];
-    /** Anthropic's place for a JSON schema. */
-    output_config?: { format?: { type: string } };
-    /** OpenAI's place for a JSON schema. */
-    text?: { format?: { type: string; name: string } };
-  };
-}
-
-async function recordedRequests(page: Page): Promise<RecordedRequest[]> {
-  return (await page.request.get(`${SERVER}/requests`)).json();
-}
-
-test.beforeEach(async ({ request }) => {
-  await request.delete(`${SERVER}/requests`);
-});
-
-/** What a test changes in the settings before it looks something up. */
-interface Setup {
-  /** The provider to switch to. Anthropic is the default. */
-  provider?: "OpenAI";
-  apiKey: string;
-  /** The English name of the language to translate into. */
-  language?: string;
-  /** `false` turns context awareness off. */
-  context?: false;
-}
-
-/**
- * Opens the settings page and changes the settings the way a user would.
- * There is no Save button: each change is stored as it is made.
- */
-async function setUp(
-  context: BrowserContext,
-  extensionId: string,
-  setup: Setup,
-) {
-  const settings = await context.newPage();
-  await settings.goto(`chrome-extension://${extensionId}/options.html`);
-  const row = (name: string) =>
-    settings.getByRole("button", { name: new RegExp(`^${name}`) });
-  const back = () => settings.getByRole("button", { name: "Back" }).click();
-
-  await row("Translation engine").click();
-  if (setup.provider) {
-    await settings
-      .getByRole("button", { name: setup.provider, exact: true })
-      .click();
-  }
-  await settings.getByLabel("API key").fill(setup.apiKey);
-  await settings.getByLabel("API key").press("Enter");
-  await expect(settings.getByText(/^Saved\./)).toBeVisible();
-  await back();
-
-  if (setup.language) {
-    await row("Translate into").click();
-    await settings
-      .getByRole("radio", { name: new RegExp(setup.language) })
-      .check();
-    await back();
-  }
-  if (setup.context === false) {
-    await row("Context").click();
-    await settings.getByRole("switch").click();
-    await back();
-    await expect(row("Context")).toContainText("Off");
-  }
-  return settings;
-}
-
-const trigger = (page: Page) =>
-  page.getByRole("button", { name: "Look up with Lingo" });
-
-/**
- * Selects one word of the test page the way a user would, by double-clicking
- * it. Resolves once the Lingo button has appeared.
- */
-async function selectWord(page: Page, word: string) {
-  const box = await page.evaluate((target) => {
-    const node = document.querySelector("#text")?.firstChild as Text;
-    const start = node.data.indexOf(target);
-    const range = document.createRange();
-    range.setStart(node, start);
-    range.setEnd(node, start + target.length);
-    const rect = range.getBoundingClientRect();
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  }, word);
-
-  // The host element is attached a moment before its listeners are.
-  await expect(async () => {
-    await page.mouse.dblclick(box.x, box.y);
-    await expect(trigger(page)).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 10_000 });
-  expect(await page.evaluate(() => getSelection()?.toString())).toBe(word);
-}
-
-/** Opens the test page and selects one word on it. */
-async function openPageAndSelect(context: BrowserContext, word: string) {
-  const page = await context.newPage();
-  await page.goto(`${SERVER}/page`);
-  // The content script mounts after the page has loaded.
-  await page.locator("lingo-ui").waitFor({ state: "attached" });
-  await selectWord(page, word);
-  return page;
-}
-
-const panel = (page: Page) =>
-  page.getByRole("region", { name: "Lingo lookup" });
-
-/** Waits until the panel shows a finished dictionary entry. */
-async function expectFinishedEntry(page: Page) {
-  await expect(panel(page).getByText("In this context")).toBeVisible();
-  await expect(panel(page).getByRole("button", { name: "Copy" })).toBeVisible();
-}
+  expectFinishedEntry,
+  openPageAndSelect,
+  panel,
+  recordedRequests,
+  selectWord,
+  setUp,
+  type TabsApi,
+  test,
+  trigger,
+} from "./extension.ts";
 
 test("defines a selected word using its paragraph", async ({
   context,
@@ -313,68 +150,6 @@ test("explains a rejected key and leads back to settings", async ({
   const opened = context.waitForEvent("page");
   await panel(page).getByRole("button", { name: "Open settings" }).click();
   await expect((await opened).url()).toContain("options.html");
-});
-
-test("checks a key with the provider before storing it", async ({
-  context,
-  extensionId,
-}, testInfo) => {
-  const settings = await context.newPage();
-  await settings.goto(`chrome-extension://${extensionId}/options.html`);
-  const engine = settings.getByRole("button", { name: /^Translation engine/ });
-  await expect(engine).toContainText("Not set");
-  await engine.click();
-  const key = settings.getByLabel("API key");
-  const enter = async (value: string) => {
-    await key.fill(value);
-    await key.press("Enter");
-  };
-
-  // A key the provider refuses is not stored.
-  await enter("bad-key");
-  await expect(
-    settings.getByText("Not saved. Anthropic rejected this key."),
-  ).toBeVisible();
-  await expect(key).toHaveAttribute("aria-invalid", "true");
-  await expect(key).toHaveValue("bad-key");
-  await settings.screenshot({ path: testInfo.outputPath("rejected.png") });
-
-  // Nor is one that could not be checked. The check can be tried again.
-  await enter("offline-key");
-  const unreachable = settings.getByText(
-    "Not saved. Lingo could not reach Anthropic.",
-  );
-  await expect(unreachable).toBeVisible();
-  await settings.getByRole("button", { name: "Try again" }).click();
-  await expect(settings.getByText(/^Checking the key/)).toBeVisible();
-  await expect(unreachable).toBeVisible();
-
-  await settings.getByRole("button", { name: "Back" }).click();
-  await expect(engine).toContainText("Not set");
-  await engine.click();
-  await expect(key).toHaveValue("");
-
-  // While the provider is being asked, the field cannot be edited.
-  await enter("slow-key");
-  await expect(
-    settings.getByText("Checking the key with Anthropic…"),
-  ).toBeVisible();
-  await expect(key).toBeDisabled();
-  await settings.screenshot({ path: testInfo.outputPath("checking.png") });
-  await expect(
-    settings.getByText("Saved. Anthropic accepted this key."),
-  ).toBeVisible();
-  await expect(key).toBeEnabled();
-  await settings.screenshot({ path: testInfo.outputPath("saved.png") });
-
-  await settings.getByRole("button", { name: "Back" }).click();
-  await expect(engine).toContainText("Claude Opus 5.5");
-
-  // Emptying the field removes the key, without asking the provider.
-  await engine.click();
-  await enter("");
-  await settings.getByRole("button", { name: "Back" }).click();
-  await expect(engine).toContainText("Not set");
 });
 
 test("asks for a key before the first lookup", async ({ context }) => {
