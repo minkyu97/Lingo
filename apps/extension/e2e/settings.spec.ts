@@ -28,6 +28,21 @@ async function expectDocked(page: Page) {
     });
 }
 
+/** The name of the next animation to end in what the extension draws. */
+function nextAnimationToEnd(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<string>((resolve) => {
+        const drawn = document.querySelector("lingo-ui")?.shadowRoot;
+        drawn?.addEventListener(
+          "animationend",
+          (event) => resolve((event as AnimationEvent).animationName),
+          { once: true },
+        );
+      }),
+  );
+}
+
 test("opens inside the page when the toolbar button is pressed", async ({
   context,
   extensionId,
@@ -59,7 +74,10 @@ test("opens inside the page when the toolbar button is pressed", async ({
     drawer(page).getByRole("button", { name: /^Translation engine/ }),
   ).toContainText("Claude Opus 5.5");
 
+  // It leaves the way it came: sliding, and then it is off the page.
+  const leaving = nextAnimationToEnd(page);
   await drawer(page).getByRole("button", { name: "Close" }).click();
+  expect(await leaving).toBe("lingo-drawer-out");
   await expect(drawerFrame(page)).toHaveCount(0);
 });
 
@@ -166,6 +184,23 @@ test("shows no settings in a frame the extension did not open", async ({
     planted.getByText("Open the settings of Lingo from its button"),
   ).toBeVisible();
   await expect(planted.getByText("Translation engine")).toHaveCount(0);
+});
+
+test("opens and closes at once for someone who avoids motion", async ({
+  context,
+  extensionId,
+  worker,
+}) => {
+  const page = await openTestPage(context);
+  await waitUntilListening(page, worker);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  await pressToolbarButton(page, extensionId);
+  await expect(
+    drawer(page).getByRole("heading", { name: "Settings" }),
+  ).toBeVisible();
+  await pressToolbarButton(page, extensionId);
+  await expect(drawerFrame(page)).toHaveCount(0);
 });
 
 test("follows the system theme inside the drawer", async ({

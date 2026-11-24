@@ -24,6 +24,12 @@
   animation: lingo-drawer-in 160ms ease-out;
 }
 
+/* Sliding out. It stays out of view until the script takes it off the page. */
+.lingo-drawer[data-closing="true"] {
+  animation: lingo-drawer-out 160ms ease-in forwards;
+  pointer-events: none;
+}
+
 .lingo-drawer iframe {
   display: block;
   width: 100%;
@@ -33,14 +39,26 @@
   color-scheme: light dark;
 }
 
+/* Out of view is past the right edge, far enough to take the shadow along. */
+
 @keyframes lingo-drawer-in {
   from {
-    transform: translateX(100%);
+    transform: translateX(calc(100% + 32px));
   }
 }
 
+@keyframes lingo-drawer-out {
+  to {
+    transform: translateX(calc(100% + 32px));
+  }
+}
+
+/*
+ * Without motion the drawer appears and disappears at once. The animation
+ * still runs, in no time, because its end is what removes a closing drawer.
+ */
 @media (prefers-reduced-motion: reduce) {
   .lingo-drawer {
-    animation: none;
+    animation-duration: 1ms;
   }
 }
