@@ -37,8 +37,9 @@ You need [mise](https://mise.jdx.dev) and Chrome 140 or later.
 1. Install the toolchain and the dependencies: `mise install`, then `pnpm install`.
 2. Build the extension: `pnpm build`.
 3. Open `chrome://extensions`, turn on developer mode, choose "Load unpacked", and select `apps/extension/.output/chrome-mv3`.
-4. The settings page opens. Enter an Anthropic or OpenAI API key and save. The key stays in your browser.
+4. The settings open in a tab. Under "Translation engine", enter an Anthropic or OpenAI API key. Lingo checks the key with the provider and then stores it in your browser.
 5. Select text on any page and press the Lingo button that appears next to it, or press Alt+Shift+L.
+6. To change the settings later, press the Lingo button in the browser's toolbar. They open in a panel inside the page.
 
 For the development commands and conventions, see [AGENTS.md](AGENTS.md).
 

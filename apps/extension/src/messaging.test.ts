@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isRuntimeMessage,
+  keyCheckResultSchema,
   MAX_SELECTION_CHARS,
   parseLookupRequest,
 } from "./messaging.ts";
@@ -72,13 +73,44 @@ describe("parseLookupRequest", () => {
 
 describe("isRuntimeMessage", () => {
   it("recognizes the known messages", () => {
-    expect(isRuntimeMessage({ type: "open-settings" })).toBe(true);
     expect(isRuntimeMessage({ type: "lookup-selection" })).toBe(true);
+    expect(isRuntimeMessage({ type: "settings-drawer-grant" })).toBe(true);
+    for (const action of ["open", "close", "toggle"]) {
+      expect(isRuntimeMessage({ type: "settings-drawer", action })).toBe(true);
+    }
   });
 
   it("rejects everything else", () => {
     expect(isRuntimeMessage({ type: "nope" })).toBe(false);
-    expect(isRuntimeMessage("open-settings")).toBe(false);
+    expect(isRuntimeMessage("lookup-selection")).toBe(false);
+    expect(isRuntimeMessage({ type: "settings-drawer" })).toBe(false);
+    expect(isRuntimeMessage({ type: "settings-drawer", action: "x" })).toBe(
+      false,
+    );
     expect(isRuntimeMessage(null)).toBe(false);
+  });
+
+  it("takes a key check only for a known provider and a real key", () => {
+    const check = { type: "check-api-key", provider: "openai", apiKey: "k" };
+    expect(isRuntimeMessage(check)).toBe(true);
+    expect(isRuntimeMessage({ ...check, provider: "other" })).toBe(false);
+    expect(isRuntimeMessage({ ...check, apiKey: "" })).toBe(false);
+    expect(isRuntimeMessage({ ...check, apiKey: "k".repeat(1001) })).toBe(
+      false,
+    );
+    expect(isRuntimeMessage({ type: "check-api-key" })).toBe(false);
+  });
+});
+
+describe("keyCheckResultSchema", () => {
+  it("passes on what the provider said", () => {
+    for (const result of ["accepted", "rejected", "unreachable"]) {
+      expect(keyCheckResultSchema.parse(result)).toBe(result);
+    }
+  });
+
+  it("reads anything else as the provider not having been reached", () => {
+    expect(keyCheckResultSchema.parse(undefined)).toBe("unreachable");
+    expect(keyCheckResultSchema.parse({ ok: true })).toBe("unreachable");
   });
 });

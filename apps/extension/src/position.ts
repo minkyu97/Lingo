@@ -81,6 +81,26 @@ export function placePanel(anchor: Point, viewport: Size): PanelPlacement {
   };
 }
 
+/**
+ * Places the panel where the user dragged it: `corner` is where its top-left
+ * corner was dropped. The panel is kept inside the viewport, with room below
+ * it for at least its shortest height.
+ */
+export function placeMovedPanel(corner: Point, viewport: Size): PanelPlacement {
+  const left = clamp(corner.x, MARGIN, viewport.width - PANEL_WIDTH - MARGIN);
+  const top = clamp(
+    corner.y,
+    MARGIN,
+    viewport.height - PANEL_MIN_HEIGHT - MARGIN,
+  );
+  const roomBelow = viewport.height - top - MARGIN;
+  return {
+    left,
+    top,
+    maxHeight: clamp(roomBelow, PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT),
+  };
+}
+
 /** Clamps to a range. The lower bound wins when the range is empty. */
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, max));

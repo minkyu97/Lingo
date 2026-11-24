@@ -1,146 +1,26 @@
 /**
- * Drives the built extension in a real browser against the fake LLM server:
- * save a key in the options page, select text on a page, and read the answer
- * in the in-page panel.
+ * Looking something up: select text on a page, and read the answer in the
+ * in-page panel.
  */
-import { fileURLToPath } from "node:url";
 import {
-  type BrowserContext,
-  test as base,
-  chromium,
+  drawer,
   expect,
-  type Page,
-  type Worker,
-} from "@playwright/test";
-
-const SERVER = "http://127.0.0.1:43117";
-const EXTENSION = fileURLToPath(
-  new URL("../.output/chrome-mv3-e2e", import.meta.url),
-);
-
-interface Fixtures {
-  context: BrowserContext;
-  worker: Worker;
-  extensionId: string;
-}
-
-const test = base.extend<Fixtures>({
-  // biome-ignore lint/correctness/noEmptyPattern: Playwright requires a destructured first argument
-  context: async ({}, use) => {
-    // Extensions need a persistent context, and only the bundled Chromium
-    // still loads unpacked ones from the command line.
-    const context = await chromium.launchPersistentContext("", {
-      channel: "chromium",
-      args: [
-        `--disable-extensions-except=${EXTENSION}`,
-        `--load-extension=${EXTENSION}`,
-      ],
-    });
-    await use(context);
-    await context.close();
-  },
-  worker: async ({ context }, use) => {
-    const worker =
-      context.serviceWorkers()[0] ??
-      (await context.waitForEvent("serviceworker"));
-    await use(worker);
-  },
-  extensionId: async ({ worker }, use) => {
-    await use(new URL(worker.url()).host);
-  },
-});
-
-/** The part of the extension API the shortcut test calls inside the service worker. */
-interface TabsApi {
-  query(filter: object): Promise<{ id?: number }[]>;
-  sendMessage(tabId: number, message: unknown): Promise<unknown>;
-}
-
-interface RecordedRequest {
-  path: string;
-  body: {
-    model: string;
-    system?: string;
-    instructions?: string;
-    fallbacks?: string;
-    messages?: { role: string; content: string }[];
-    input?: { role: string; content: string }[];
-    /** Anthropic's place for a JSON schema. */
-    output_config?: { format?: { type: string } };
-    /** OpenAI's place for a JSON schema. */
-    text?: { format?: { type: string; name: string } };
-  };
-}
-
-async function recordedRequests(page: Page): Promise<RecordedRequest[]> {
-  return (await page.request.get(`${SERVER}/requests`)).json();
-}
-
-test.beforeEach(async ({ request }) => {
-  await request.delete(`${SERVER}/requests`);
-});
-
-async function saveSettings(
-  context: BrowserContext,
-  extensionId: string,
-  fill: (options: Page) => Promise<void>,
-) {
-  const options = await context.newPage();
-  await options.goto(`chrome-extension://${extensionId}/options.html`);
-  await fill(options);
-  await options.getByRole("button", { name: "Save" }).click();
-  await expect(options.getByText("Saved")).toBeVisible();
-  return options;
-}
-
-const trigger = (page: Page) =>
-  page.getByRole("button", { name: "Look up with Lingo" });
-
-/**
- * Opens the test page and selects one word the way a user would, by
- * double-clicking it. Resolves once the Lingo button has appeared.
- */
-async function openPageAndSelect(context: BrowserContext, word: string) {
-  const page = await context.newPage();
-  await page.goto(`${SERVER}/page`);
-  // The content script mounts after the page has loaded.
-  await page.locator("lingo-lookup").waitFor({ state: "attached" });
-
-  const box = await page.evaluate((target) => {
-    const node = document.querySelector("#text")?.firstChild as Text;
-    const start = node.data.indexOf(target);
-    const range = document.createRange();
-    range.setStart(node, start);
-    range.setEnd(node, start + target.length);
-    const rect = range.getBoundingClientRect();
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  }, word);
-
-  // The host element is attached a moment before its listeners are.
-  await expect(async () => {
-    await page.mouse.dblclick(box.x, box.y);
-    await expect(trigger(page)).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 10_000 });
-  expect(await page.evaluate(() => getSelection()?.toString())).toBe(word);
-  return page;
-}
-
-const panel = (page: Page) =>
-  page.getByRole("region", { name: "Lingo lookup" });
-
-/** Waits until the panel shows a finished dictionary entry. */
-async function expectFinishedEntry(page: Page) {
-  await expect(panel(page).getByText("In this context")).toBeVisible();
-  await expect(panel(page).getByRole("button", { name: "Copy" })).toBeVisible();
-}
+  expectFinishedEntry,
+  openPageAndSelect,
+  panel,
+  recordedRequests,
+  selectWord,
+  setUp,
+  type TabsApi,
+  test,
+  trigger,
+} from "./extension.ts";
 
 test("defines a selected word using its paragraph", async ({
   context,
   extensionId,
 }, testInfo) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "bank");
 
   await trigger(page).click();
@@ -191,9 +71,7 @@ test("switching the mode runs the lookup again", async ({
   context,
   extensionId,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
   await expectFinishedEntry(page);
@@ -217,10 +95,7 @@ test("sends only the selection when context awareness is off", async ({
   context,
   extensionId,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-    await options.getByLabel("Send the text around my selection").uncheck();
-  });
+  await setUp(context, extensionId, { apiKey: "test-key", context: false });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
 
@@ -234,15 +109,14 @@ test("uses OpenAI when it is the chosen provider", async ({
   context,
   extensionId,
 }, testInfo) => {
-  const options = await saveSettings(context, extensionId, async (page) => {
-    await page.getByLabel("OpenAI", { exact: true }).check();
-    await page.getByLabel("OpenAI API key").fill("test-key");
-    await page.getByLabel("Translate into").selectOption("ja");
+  const settings = await setUp(context, extensionId, {
+    provider: "OpenAI",
+    apiKey: "test-key",
+    language: "Japanese",
   });
-  await options.screenshot({
-    path: testInfo.outputPath("options.png"),
-    fullPage: true,
-  });
+  await expect(settings.getByText("GPT-6.2 Sol")).toBeVisible();
+  await expect(settings.getByText("日本語")).toBeVisible();
+  await settings.screenshot({ path: testInfo.outputPath("settings.png") });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
 
@@ -265,19 +139,20 @@ test("explains a rejected key and leads back to settings", async ({
   context,
   extensionId,
 }, testInfo) => {
-  const options = await saveSettings(context, extensionId, async (page) => {
-    await page.getByLabel("Anthropic API key").fill("bad-key");
-  });
-  await options.close();
+  // The key passed its check when it was entered, and was withdrawn since.
+  const settings = await setUp(context, extensionId, { apiKey: "revoked-key" });
+  await settings.close();
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
 
   await expect(panel(page)).toContainText("rejected your API key");
   await page.screenshot({ path: testInfo.outputPath("error.png") });
 
-  const opened = context.waitForEvent("page");
+  // The settings open in the same page, where the key can be corrected.
   await panel(page).getByRole("button", { name: "Open settings" }).click();
-  await expect((await opened).url()).toContain("options.html");
+  await expect(
+    drawer(page).getByRole("button", { name: /^Translation engine/ }),
+  ).toContainText("Claude Opus 5.5");
 });
 
 test("asks for a key before the first lookup", async ({ context }) => {
@@ -292,9 +167,7 @@ test("closes on Escape and on a click outside", async ({
   context,
   extensionId,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
   await expect(panel(page)).toBeVisible();
@@ -309,14 +182,92 @@ test("closes on Escape and on a click outside", async ({
   await expect(panel(second)).toBeHidden();
 });
 
+test("stays open while pinned, until Close is pressed", async ({
+  context,
+  extensionId,
+}) => {
+  await setUp(context, extensionId, { apiKey: "test-key" });
+  const page = await openPageAndSelect(context, "bank");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+
+  const pin = panel(page).getByRole("button", { name: "Pin" });
+  await pin.click();
+  await expect(pin).toHaveAttribute("aria-pressed", "true");
+
+  // What closes an unpinned panel leaves this one alone.
+  await page.keyboard.press("Escape");
+  await page.mouse.click(5, 5);
+  await expect(panel(page)).toBeVisible();
+
+  // A new lookup shows in the pinned panel, where it already is.
+  const place = await panel(page).boundingBox();
+  await selectWord(page, "boats");
+  await trigger(page).click();
+  await expect(trigger(page)).toBeHidden();
+  await expect.poll(async () => (await recordedRequests(page)).length).toBe(2);
+  const [, second] = await recordedRequests(page);
+  expect(second?.body.messages?.[0]?.content).toContain("[[boats]]");
+  await expectFinishedEntry(page);
+  expect(await panel(page).boundingBox()).toEqual(place);
+  await expect(pin).toHaveAttribute("aria-pressed", "true");
+
+  await panel(page).getByRole("button", { name: "Close" }).click();
+  await expect(panel(page)).toBeHidden();
+
+  // The next panel starts unpinned.
+  await selectWord(page, "river");
+  await trigger(page).click();
+  await expect(pin).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toBeHidden();
+});
+
+test("moves when its header is dragged, and stays there", async ({
+  context,
+  extensionId,
+}) => {
+  await setUp(context, extensionId, { apiKey: "test-key" });
+  const page = await openPageAndSelect(context, "bank");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+
+  const corner = async () => {
+    const box = await panel(page).boundingBox();
+    if (!box) throw new Error("The panel is not on screen");
+    return { x: box.x, y: box.y };
+  };
+  const before = await corner();
+  const header = await panel(page).locator("header").boundingBox();
+  if (!header) throw new Error("The panel has no header");
+  // The middle of the header, between its controls, is where the handle is.
+  const grip = {
+    x: header.x + header.width / 2,
+    y: header.y + header.height / 2,
+  };
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 200, grip.y + 120, { steps: 5 });
+  await page.mouse.up();
+
+  const after = await corner();
+  expect(after.x - before.x).toBeCloseTo(200, 0);
+  expect(after.y - before.y).toBeCloseTo(120, 0);
+  // Dragging neither closed the panel nor dropped the page's selection.
+  expect(await page.evaluate(() => getSelection()?.toString())).toBe("bank");
+
+  // Asking again in the other mode leaves the panel where it was put.
+  await panel(page).getByRole("button", { name: "Translate" }).click();
+  await expect(panel(page)).toContainText("안녕하세요");
+  expect(await corner()).toEqual(after);
+});
+
 test("looks up the selection when the shortcut message arrives", async ({
   context,
   extensionId,
   worker,
 }) => {
-  await saveSettings(context, extensionId, async (options) => {
-    await options.getByLabel("Anthropic API key").fill("test-key");
-  });
+  await setUp(context, extensionId, { apiKey: "test-key" });
   const page = await openPageAndSelect(context, "boats");
   await page.bringToFront();
 

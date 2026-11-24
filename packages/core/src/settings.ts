@@ -19,6 +19,9 @@ export interface Settings {
 
 export const MAX_CONTEXT_CHARS_LIMIT = 4000;
 
+/** The longest contexts offered in settings, in characters. */
+export const CONTEXT_CHAR_PRESETS: readonly number[] = [500, 1000, 2000, 4000];
+
 /** Languages offered as translation targets, as BCP 47 tags. */
 export const TARGET_LANGUAGES: readonly string[] = [
   "en",
@@ -112,6 +115,21 @@ export function languageName(tag: string): string {
     return names.of(tag) ?? tag;
   } catch {
     return tag;
+  }
+}
+
+/**
+ * A language's name in that language, capitalized: "ko" becomes "한국어" and
+ * "es" becomes "Español". Falls back to the English name.
+ */
+export function nativeLanguageName(tag: string): string {
+  try {
+    const name = new Intl.DisplayNames([tag], { type: "language" }).of(tag);
+    if (!name) return languageName(tag);
+    // Several languages write their own name in lower case.
+    return name.charAt(0).toLocaleUpperCase(tag) + name.slice(1);
+  } catch {
+    return languageName(tag);
   }
 }
 

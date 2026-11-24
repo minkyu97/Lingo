@@ -1,7 +1,8 @@
 import { type CapturedContext, chooseMode, type LookupMode } from "@lingo/core";
-import { LookupCard } from "@lingo/ui";
+import { LookupCard, LookupTrigger } from "@lingo/ui";
 import {
   type CSSProperties,
+  type PointerEvent,
   useCallback,
   useEffect,
   useRef,
@@ -9,6 +10,7 @@ import {
 } from "react";
 import { browser } from "wxt/browser";
 import { captureContext } from "../../src/context/dom.ts";
+import { followPointer } from "../../src/drag.ts";
 import { openLookup } from "../../src/lookup-client.ts";
 import {
   applyLookupEvent,
@@ -20,7 +22,12 @@ import {
   MAX_SELECTION_CHARS,
   type RuntimeMessage,
 } from "../../src/messaging.ts";
-import { type Point, placePanel, placeTrigger } from "../../src/position.ts";
+import {
+  type Point,
+  placeMovedPanel,
+  placePanel,
+  placeTrigger,
+} from "../../src/position.ts";
 
 interface Trigger {
   position: Point;
@@ -28,7 +35,10 @@ interface Trigger {
 }
 
 interface Panel {
-  position: Point;
+  /** Where the lookup was asked for. The card opens just below or above it. */
+  anchor: Point;
+  /** Where the user dragged the card's top-left corner to, once they have. */
+  moved?: Point;
   lookup: LookupState;
 }
 
@@ -53,38 +63,70 @@ function selectionAnchor(): Point {
 
 /**
  * The in-page UI: a small button that appears next to a new selection, and
- * the panel with the streaming answer that it opens.
+ * the panel with the streaming answer that it opens. The panel can be dragged
+ * by its header, and pinned so that only its Close button closes it.
  */
 export function LookupApp({ host }: { host: Element }) {
   const [trigger, setTrigger] = useState<Trigger | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
+  // A pinned panel stays open until its Close button is pressed.
+  const [pinned, setPinned] = useState(false);
+  const panelElement = useRef<HTMLDivElement>(null);
   const cancelLookup = useRef<() => void>(() => {});
 
   const close = useCallback(() => {
     cancelLookup.current();
     setTrigger(null);
     setPanel(null);
+    setPinned(false);
   }, []);
 
-  const run = useCallback(
-    (captured: CapturedContext, mode: LookupMode, position: Point) => {
-      cancelLookup.current();
+  /** Sends a request, and feeds what comes back into the card. */
+  const request = useCallback((captured: CapturedContext, mode: LookupMode) => {
+    cancelLookup.current();
+    cancelLookup.current = openLookup(
+      { type: "start", mode, context: captured },
+      (event) =>
+        setPanel(
+          (current) =>
+            current && {
+              ...current,
+              lookup: applyLookupEvent(current.lookup, event),
+            },
+        ),
+    );
+  }, []);
+
+  /**
+   * Looks up a new selection, in a card that opens at `anchor`. A pinned card
+   * shows the new answer where it already is.
+   */
+  const lookUp = useCallback(
+    (captured: CapturedContext, mode: LookupMode, anchor: Point) => {
+      const lookup = initialLookupState(mode, captured);
       setTrigger(null);
-      setPanel({ position, lookup: initialLookupState(mode, captured) });
-      cancelLookup.current = openLookup(
-        { type: "start", mode, context: captured },
-        (event) =>
-          setPanel(
-            (current) =>
-              current && {
-                ...current,
-                lookup: applyLookupEvent(current.lookup, event),
-              },
-          ),
+      setPanel((current) =>
+        pinned && current ? { ...current, lookup } : { anchor, lookup },
       );
+      request(captured, mode);
     },
-    [],
+    [pinned, request],
   );
+
+  /** Asks again about the same selection, leaving the card where it is. */
+  const lookUpAgain = (mode: LookupMode) => {
+    if (!panel) return;
+    const { captured } = panel.lookup;
+    setPanel({ ...panel, lookup: initialLookupState(mode, captured) });
+    request(captured, mode);
+  };
+
+  const startDrag = (event: PointerEvent<HTMLElement>) => {
+    if (!panelElement.current) return;
+    followPointer(event, panelElement.current, (moved) =>
+      setPanel((current) => current && { ...current, moved }),
+    );
+  };
 
   useEffect(() => {
     const insideLingo = (event: Event) => event.composedPath().includes(host);
@@ -104,11 +146,11 @@ export function LookupApp({ host }: { host: Element }) {
     };
 
     const onMouseDown = (event: MouseEvent) => {
-      if (!insideLingo(event)) close();
+      if (!insideLingo(event) && !pinned) close();
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape" && !pinned) close();
     };
 
     // The button is pinned to the viewport, so it would drift off the text.
@@ -128,7 +170,7 @@ export function LookupApp({ host }: { host: Element }) {
       document.removeEventListener("scroll", onScroll, { capture: true });
       cancelLookup.current();
     };
-  }, [host, close]);
+  }, [host, close, pinned]);
 
   // The keyboard shortcut arrives from the background. Every frame gets the
   // message, and only the one that holds the selection answers.
@@ -139,20 +181,43 @@ export function LookupApp({ host }: { host: Element }) {
       }
       const captured = captureContext();
       if (!captured || captured.selection.length > MAX_SELECTION_CHARS) return;
-      run(captured, chooseMode(captured.selection), selectionAnchor());
+      lookUp(captured, chooseMode(captured.selection), selectionAnchor());
     };
     browser.runtime.onMessage.addListener(onMessage);
     return () => browser.runtime.onMessage.removeListener(onMessage);
-  }, [run]);
+  }, [lookUp]);
 
   const openSettings = () => {
-    const message: RuntimeMessage = { type: "open-settings" };
+    // The drawer belongs to the top frame, and this may be a frame inside
+    // it, so the background passes the request on.
+    const message: RuntimeMessage = { type: "settings-drawer", action: "open" };
     void browser.runtime.sendMessage(message).catch(() => {});
   };
 
-  if (panel) {
-    const { lookup, position } = panel;
-    const placed = placePanel(position, viewport());
+  return (
+    <>
+      {panel && renderPanel(panel)}
+      {trigger && (
+        <LookupTrigger
+          style={{ left: trigger.position.x, top: trigger.position.y }}
+          // Keep the page's selection when the button is pressed.
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() =>
+            lookUp(
+              trigger.captured,
+              chooseMode(trigger.captured.selection),
+              trigger.position,
+            )
+          }
+        />
+      )}
+    </>
+  );
+
+  function renderPanel({ lookup, anchor, moved }: Panel) {
+    const placed = moved
+      ? placeMovedPanel(moved, viewport())
+      : placePanel(anchor, viewport());
     const style = {
       left: placed.left,
       top: placed.top,
@@ -160,38 +225,22 @@ export function LookupApp({ host }: { host: Element }) {
       "--lingo-card-max-height": `${placed.maxHeight}px`,
     } as CSSProperties;
     return (
-      <div className="lingo-panel" style={style}>
+      <div className="lingo-panel" ref={panelElement} style={style}>
         <LookupCard
           mode={lookup.mode}
           status={lookup.status}
           text={lookup.text}
           context={lookup.context}
           error={lookup.error}
-          onModeChange={(mode) => run(lookup.captured, mode, position)}
-          onRetry={() => run(lookup.captured, lookup.mode, position)}
+          pinned={pinned}
+          onModeChange={lookUpAgain}
+          onPinnedChange={setPinned}
+          onDragStart={startDrag}
+          onRetry={() => lookUpAgain(lookup.mode)}
           onOpenSettings={openSettings}
           onClose={close}
         />
       </div>
     );
   }
-
-  if (trigger) {
-    const { captured, position } = trigger;
-    return (
-      <button
-        type="button"
-        className="lingo-trigger"
-        style={{ left: position.x, top: position.y }}
-        aria-label="Look up with Lingo"
-        // Keep the page's selection when the button is pressed.
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => run(captured, chooseMode(captured.selection), position)}
-      >
-        L
-      </button>
-    );
-  }
-
-  return null;
 }

@@ -1,0 +1,268 @@
+@import "./tokens.css";
+@import "./controls.css";
+
+/* The button that appears beside a selection. The host positions it. */
+
+.lingo-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--lingo-border);
+  border-radius: var(--lingo-radius-md);
+  background: var(--lingo-bg);
+  box-shadow: var(--lingo-shadow-raised);
+}
+
+.lingo-trigger:hover {
+  background: var(--lingo-subtle);
+}
+
+/* The lookup card: one answer, its mode, and what was sent to get it. */
+
+.lingo-card {
+  display: flex;
+  flex-direction: column;
+  width: var(--lingo-popover-width);
+  max-width: calc(100vw - 16px);
+  /* The host can lower this when there is less room around the card. */
+  max-height: var(--lingo-card-max-height, 440px);
+  overflow: hidden;
+  border: 1px solid var(--lingo-border);
+  border-radius: var(--lingo-radius-lg);
+  background: var(--lingo-bg);
+  box-shadow: var(--lingo-shadow-popover);
+}
+
+.lingo-card__header,
+.lingo-card__footer,
+.lingo-card__context {
+  flex: none;
+}
+
+.lingo-card__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--lingo-space-8);
+  border-bottom: 1px solid var(--lingo-border);
+  user-select: none;
+}
+
+.lingo-card__header[data-draggable="true"] {
+  cursor: grab;
+  /* Lets a touch drag move the card instead of scrolling the page. */
+  touch-action: none;
+}
+
+.lingo-card__header[data-draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.lingo-card__handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  color: var(--lingo-muted);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.lingo-card__actions {
+  display: flex;
+  gap: var(--lingo-space-2);
+}
+
+.lingo-card__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--lingo-space-12);
+}
+
+.lingo-card__text,
+.lingo-card__placeholder {
+  font: var(--lingo-text-paragraph);
+}
+
+.lingo-card__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lingo-card__placeholder {
+  color: var(--lingo-muted);
+}
+
+/* A caret after the last word while the answer is still arriving. */
+.lingo-card__text[data-streaming="true"]::after,
+.lingo-entry[data-streaming="true"]::after {
+  display: inline-block;
+  width: 2px;
+  height: 16px;
+  margin-left: var(--lingo-space-2);
+  border-radius: 1px;
+  background: var(--lingo-muted);
+  content: "";
+  vertical-align: text-bottom;
+  animation: lingo-blink 1s steps(2, start) infinite;
+}
+
+@keyframes lingo-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.lingo-card__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lingo-space-12);
+}
+
+/* Lines the button up with the message text, past the icon. */
+.lingo-card__error .lingo-button {
+  margin-left: var(--lingo-space-24);
+}
+
+.lingo-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  padding: 0 var(--lingo-space-8);
+  border-top: 1px solid var(--lingo-border);
+}
+
+.lingo-card__footnote {
+  /* Text buttons have this much padding, so plain text lines up with them. */
+  padding: 0 var(--lingo-space-4);
+  color: var(--lingo-muted);
+  font: var(--lingo-text-caption);
+}
+
+/* What was sent with the selection. The selection itself stands out. */
+
+.lingo-card__context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lingo-space-4);
+  max-height: 140px;
+  overflow-y: auto;
+  padding: var(--lingo-space-8) var(--lingo-space-12) var(--lingo-space-12);
+  border-top: 1px solid var(--lingo-border);
+  background: var(--lingo-subtle);
+  color: var(--lingo-muted);
+  font: var(--lingo-text-caption);
+  overflow-wrap: anywhere;
+}
+
+.lingo-card__context strong {
+  color: var(--lingo-fg);
+  font-weight: 600;
+}
+
+/* A definition laid out as a dictionary entry. */
+
+.lingo-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--lingo-space-12);
+}
+
+.lingo-entry[data-streaming="true"]::after {
+  align-self: flex-start;
+  margin-left: 0;
+}
+
+.lingo-entry__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--lingo-space-8);
+}
+
+.lingo-entry__headword {
+  font: var(--lingo-text-heading);
+  overflow-wrap: anywhere;
+}
+
+.lingo-entry__pronunciation {
+  color: var(--lingo-muted);
+  font: var(--lingo-text-small);
+}
+
+.lingo-entry__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lingo-space-4);
+}
+
+.lingo-entry__part-of-speech {
+  color: var(--lingo-muted);
+  font: var(--lingo-text-caption-strong);
+}
+
+.lingo-entry__senses {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lingo-space-8);
+  padding: 0;
+  list-style: none;
+  counter-reset: lingo-sense;
+}
+
+.lingo-entry__sense {
+  position: relative;
+  /* Room for the number: 12px wide, then an 8px gap. */
+  padding-left: 20px;
+  counter-increment: lingo-sense;
+  overflow-wrap: anywhere;
+}
+
+.lingo-entry__sense::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--lingo-muted);
+  font: var(--lingo-text-caption);
+  /* The height of the first line of the meaning, so the two line up. */
+  line-height: 20px;
+  content: counter(lingo-sense);
+}
+
+.lingo-entry__meaning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lingo-space-2) var(--lingo-space-8);
+}
+
+.lingo-entry__sense[data-in-context="true"] .lingo-entry__meaning {
+  font: var(--lingo-text-body-strong);
+}
+
+.lingo-entry__example,
+.lingo-entry__translation {
+  font: var(--lingo-text-small);
+}
+
+.lingo-entry__example {
+  margin-top: var(--lingo-space-2);
+}
+
+.lingo-entry__translation {
+  color: var(--lingo-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lingo-card__text[data-streaming="true"]::after,
+  .lingo-entry[data-streaming="true"]::after {
+    animation: none;
+  }
+}

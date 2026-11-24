@@ -3,6 +3,7 @@ import {
   PANEL_MAX_HEIGHT,
   PANEL_MIN_HEIGHT,
   PANEL_WIDTH,
+  placeMovedPanel,
   placePanel,
   placeTrigger,
   TRIGGER_SIZE,
@@ -79,5 +80,32 @@ describe("placePanel", () => {
     expect(placed.maxHeight).toBe(PANEL_MIN_HEIGHT);
     expect(placed.left).toBeGreaterThanOrEqual(0);
     expect(placed.top).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("placeMovedPanel", () => {
+  it("puts the corner of the panel where it was dropped", () => {
+    expect(placeMovedPanel({ x: 300, y: 120 }, viewport)).toEqual({
+      left: 300,
+      top: 120,
+      maxHeight: PANEL_MAX_HEIGHT,
+    });
+  });
+
+  it("gives the panel only the room that is left below it", () => {
+    const placed = placeMovedPanel({ x: 300, y: 500 }, viewport);
+    expect(placed.top).toBe(500);
+    expect(placed.maxHeight).toBe(viewport.height - 500 - 8);
+  });
+
+  it("keeps the panel inside the viewport", () => {
+    const beyond = placeMovedPanel({ x: 5000, y: 5000 }, viewport);
+    expect(beyond.left + PANEL_WIDTH).toBeLessThanOrEqual(viewport.width);
+    expect(beyond.top).toBe(viewport.height - PANEL_MIN_HEIGHT - 8);
+    expect(beyond.maxHeight).toBe(PANEL_MIN_HEIGHT);
+
+    const before = placeMovedPanel({ x: -200, y: -200 }, viewport);
+    expect(before.left).toBe(8);
+    expect(before.top).toBe(8);
   });
 });

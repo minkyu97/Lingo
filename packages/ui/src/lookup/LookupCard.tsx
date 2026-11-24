@@ -7,7 +7,22 @@ import {
   type LookupMode,
   parseDictionaryEntry,
 } from "@lingo/core";
-import { useMemo, useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  GripHorizontal,
+  Pin,
+  X,
+} from "lucide-react";
+import { type PointerEvent, useMemo, useState } from "react";
+import { Button } from "../controls/Button.tsx";
+import { ErrorMessage } from "../controls/ErrorMessage.tsx";
+import { Icon } from "../controls/Icon.tsx";
+import { IconButton } from "../controls/IconButton.tsx";
+import { SegmentedControl } from "../controls/SegmentedControl.tsx";
+import { TextButton } from "../controls/TextButton.tsx";
 import { DictionaryEntryView } from "./DictionaryEntryView.tsx";
 
 export type LookupStatus = "loading" | "streaming" | "done" | "error";
@@ -23,15 +38,23 @@ export interface LookupCardProps {
   /** The context that was sent with the request, once known. */
   context?: CapturedContext;
   error?: { kind: LLMErrorKind; message: string };
+  /** Whether the card stays open until Close is pressed. */
+  pinned?: boolean;
   onModeChange?: (mode: LookupMode) => void;
+  onPinnedChange?: (pinned: boolean) => void;
+  /**
+   * Called when the header is pressed outside its controls. A host that can
+   * move the card starts the move here; the header then shows a grab cursor.
+   */
+  onDragStart?: (event: PointerEvent<HTMLElement>) => void;
   onRetry?: () => void;
   onOpenSettings?: () => void;
   onClose?: () => void;
 }
 
-const MODES: { id: LookupMode; label: string }[] = [
-  { id: "translate", label: "Translate" },
-  { id: "define", label: "Define" },
+const MODES: { value: LookupMode; label: string }[] = [
+  { value: "translate", label: "Translate" },
+  { value: "define", label: "Define" },
 ];
 
 const CONTEXT_LABELS: Record<ContextLevel, string> = {
@@ -57,7 +80,7 @@ const JSON_START = /^\s*(`|\{)/;
 
 /** Shows one lookup: the streaming answer, its mode, and what was sent. */
 export function LookupCard(props: LookupCardProps) {
-  const { mode, status, text, context, error } = props;
+  const { mode, status, text, context, error, pinned = false } = props;
   const [showContext, setShowContext] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -84,52 +107,52 @@ export function LookupCard(props: LookupCardProps) {
     setTimeout(() => setCopied(false), 1500);
   }
 
+  function startDrag(event: PointerEvent<HTMLElement>) {
+    // A press on a control is for that control, not for moving the card.
+    const onControl = (event.target as Element).closest("button") !== null;
+    if (event.button === 0 && !onControl) props.onDragStart?.(event);
+  }
+
   return (
-    <section className="lingo-card" aria-label="Lingo lookup">
-      <header className="lingo-card__header">
-        <div className="lingo-card__modes">
-          {MODES.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              className="lingo-card__mode"
-              aria-pressed={id === mode}
-              onClick={() => id !== mode && props.onModeChange?.(id)}
-            >
-              {label}
-            </button>
-          ))}
+    <section className="lingo lingo-card" aria-label="Lingo lookup">
+      <header
+        className="lingo-card__header"
+        data-draggable={props.onDragStart !== undefined}
+        onPointerDown={startDrag}
+      >
+        <SegmentedControl
+          label="Mode"
+          size="small"
+          options={MODES}
+          value={mode}
+          onChange={props.onModeChange}
+        />
+        {/* A hint that the header can be dragged. The whole header is the handle. */}
+        <span className="lingo-card__handle" aria-hidden="true">
+          <Icon icon={GripHorizontal} />
+        </span>
+        <div className="lingo-card__actions">
+          <IconButton
+            icon={Pin}
+            label="Pin"
+            title="Keep open until closed"
+            pressed={pinned}
+            onClick={() => props.onPinnedChange?.(!pinned)}
+          />
+          <IconButton icon={X} label="Close" onClick={props.onClose} />
         </div>
-        <button
-          type="button"
-          className="lingo-card__icon"
-          aria-label="Close"
-          onClick={props.onClose}
-        >
-          ×
-        </button>
       </header>
 
       <div className="lingo-card__body" aria-live="polite">
         {status === "error" && error ? (
           <div className="lingo-card__error" role="alert">
-            <p>{ERROR_MESSAGES[error.kind] ?? error.message}</p>
+            <ErrorMessage>
+              {ERROR_MESSAGES[error.kind] ?? error.message}
+            </ErrorMessage>
             {SETTINGS_ERRORS.includes(error.kind) ? (
-              <button
-                type="button"
-                className="lingo-card__action"
-                onClick={props.onOpenSettings}
-              >
-                Open settings
-              </button>
+              <Button onClick={props.onOpenSettings}>Open settings</Button>
             ) : (
-              <button
-                type="button"
-                className="lingo-card__action"
-                onClick={props.onRetry}
-              >
-                Try again
-              </button>
+              <Button onClick={props.onRetry}>Try again</Button>
             )}
           </div>
         ) : status === "loading" || awaitingEntry ? (
@@ -153,30 +176,29 @@ export function LookupCard(props: LookupCardProps) {
         {context === undefined ? (
           <span />
         ) : hasContext ? (
-          <button
-            type="button"
-            className="lingo-card__link"
+          <TextButton
+            trailingIcon={showContext ? ChevronUp : ChevronDown}
             aria-expanded={showContext}
             onClick={() => setShowContext((shown) => !shown)}
           >
             {CONTEXT_LABELS[context.level]}
-          </button>
+          </TextButton>
         ) : (
-          <span className="lingo-card__muted">{CONTEXT_LABELS.none}</span>
+          <span className="lingo-card__footnote">{CONTEXT_LABELS.none}</span>
         )}
         {status === "done" && (
-          <button type="button" className="lingo-card__link" onClick={copy}>
+          <TextButton leadingIcon={copied ? Check : Copy} onClick={copy}>
             {copied ? "Copied" : "Copy"}
-          </button>
+          </TextButton>
         )}
       </footer>
 
       {showContext && hasContext && (
         <div className="lingo-card__context">
-          <p className="lingo-card__muted">Sent with your selection:</p>
+          <p>Sent with your selection</p>
           <p>
             {context.before}
-            <mark>{context.selection}</mark>
+            <strong>{context.selection}</strong>
             {context.after}
           </p>
         </div>

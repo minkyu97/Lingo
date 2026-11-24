@@ -1,0 +1,192 @@
+@import "./tokens.css";
+@import "./controls.css";
+
+/* The settings panel. It fills the box its host gives it. */
+
+.lingo-settings {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--lingo-bg);
+}
+
+.lingo-settings__content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: var(--lingo-space-8);
+}
+
+.lingo-settings__field {
+  padding: 0 var(--lingo-space-16) var(--lingo-space-8);
+}
+
+.lingo-settings__message {
+  padding: 0 var(--lingo-space-16) var(--lingo-space-4);
+}
+
+.lingo-settings__note {
+  padding: var(--lingo-space-4) var(--lingo-space-16) var(--lingo-space-8);
+  color: var(--lingo-muted);
+  font: var(--lingo-text-caption);
+}
+
+.lingo-settings__footer {
+  flex: none;
+  padding: var(--lingo-space-16);
+  color: var(--lingo-muted);
+  font: var(--lingo-text-caption);
+}
+
+/* Panel header */
+
+.lingo-panel-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 var(--lingo-space-12) 0 var(--lingo-space-16);
+  border-bottom: 1px solid var(--lingo-border);
+}
+
+/* The Back button has its own padding, so it sits closer to the edge. */
+.lingo-panel-header[data-detail="true"] {
+  gap: var(--lingo-space-4);
+  padding-left: var(--lingo-space-8);
+}
+
+.lingo-panel-header__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: var(--lingo-text-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Group label and divider */
+
+.lingo-group-label {
+  padding: var(--lingo-space-16) var(--lingo-space-16) 6px;
+  color: var(--lingo-muted);
+  font: var(--lingo-text-group-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lingo-divider {
+  height: 1px;
+  margin: var(--lingo-space-8) 0;
+  border: 0;
+  background: var(--lingo-border);
+}
+
+/* Settings row */
+
+.lingo-settings-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lingo-space-12);
+  width: 100%;
+  height: 48px;
+  padding: 0 var(--lingo-space-12) 0 var(--lingo-space-16);
+  color: var(--lingo-fg);
+  font: var(--lingo-text-body);
+  text-align: left;
+  text-decoration: none;
+}
+
+.lingo-settings-row:hover {
+  background: var(--lingo-subtle);
+}
+
+.lingo-settings-row:focus-visible {
+  outline-offset: -2px;
+}
+
+.lingo-settings-row__label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lingo-settings-row__value {
+  flex: none;
+  color: var(--lingo-muted);
+}
+
+.lingo-settings-row__value[data-warning="true"] {
+  color: var(--lingo-danger);
+}
+
+.lingo-settings-row__trailing {
+  display: flex;
+  flex: none;
+  color: var(--lingo-muted);
+}
+
+/* Option row: a radio button drawn as a row with a check mark. */
+
+.lingo-option-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--lingo-space-8);
+  height: 40px;
+  padding: 0 var(--lingo-space-16);
+  cursor: pointer;
+}
+
+.lingo-option-row:hover {
+  background: var(--lingo-subtle);
+}
+
+/* The radio button itself is invisible and covers the row. */
+.lingo-option-row input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  cursor: inherit;
+  opacity: 0;
+}
+
+.lingo-option-row:has(input:focus-visible) {
+  outline: 2px solid var(--lingo-accent);
+  outline-offset: -2px;
+}
+
+.lingo-option-row:has(input:disabled) {
+  background: none;
+  color: var(--lingo-muted);
+  cursor: default;
+}
+
+.lingo-option-row__description {
+  color: var(--lingo-muted);
+}
+
+.lingo-option-row__check {
+  display: none;
+  margin-left: auto;
+  color: var(--lingo-accent);
+}
+
+.lingo-option-row:has(input:checked) .lingo-option-row__check {
+  display: flex;
+}
+
+.lingo-option-row:has(input:disabled) .lingo-option-row__check {
+  color: var(--lingo-muted);
+}
+
+/* Switch row: a setting that is turned on or off in place. */
+
+.lingo-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lingo-space-12);
+  min-height: 48px;
+  padding: 0 var(--lingo-space-16);
+}

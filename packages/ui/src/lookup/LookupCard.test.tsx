@@ -52,11 +52,17 @@ describe("LookupCard", () => {
 
   it("reveals the context that was sent on request", () => {
     renderCard({ context });
-    expect(screen.queryByText("Sent with your selection:")).toBeNull();
+    expect(screen.queryByText("Sent with your selection")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Paragraph context" }));
-    expect(screen.getByText("Sent with your selection:")).toBeDefined();
-    expect(screen.getByText("bank").tagName).toBe("MARK");
+    const disclosure = screen.getByRole("button", {
+      name: "Paragraph context",
+    });
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(disclosure);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Sent with your selection")).toBeDefined();
+    // The selection stands out from the text around it.
+    expect(screen.getByText("bank").tagName).toBe("STRONG");
   });
 
   it("says so when only the selection was sent", () => {
@@ -163,6 +169,42 @@ describe("LookupCard", () => {
   it("shows a translation as plain text even when it looks like JSON", () => {
     renderCard({ mode: "translate", text: '{"headword":"bank"}' });
     expect(screen.getByText('{"headword":"bank"}')).toBeDefined();
+  });
+
+  it("says whether it is pinned and reports a press on Pin", () => {
+    const onPinnedChange = vi.fn();
+    const { rerender } = renderCard({ onPinnedChange });
+
+    const pin = screen.getByRole("button", { name: "Pin" });
+    expect(pin.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(pin);
+    expect(onPinnedChange).toHaveBeenCalledWith(true);
+
+    rerender(
+      <LookupCard
+        mode="translate"
+        status="done"
+        text="강둑"
+        pinned
+        onPinnedChange={onPinnedChange}
+      />,
+    );
+    expect(pin.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(pin);
+    expect(onPinnedChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("starts a drag from the header, but not from its controls", () => {
+    const onDragStart = vi.fn();
+    renderCard({ onDragStart });
+    const header = screen.getByRole("banner");
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Close" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Define" }));
+    expect(onDragStart).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(header);
+    expect(onDragStart).toHaveBeenCalledOnce();
   });
 
   it("closes", () => {

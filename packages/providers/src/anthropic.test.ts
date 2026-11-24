@@ -7,6 +7,7 @@ import {
   fakeFetch,
   fixture,
   jsonRequest,
+  jsonResponse,
   sampleRequest,
   sseResponse,
 } from "./testing.ts";
@@ -179,6 +180,62 @@ describe("createAnthropicProvider", () => {
       },
     });
     const error = await collect(provider, sampleRequest).catch((e) => e);
+    expect(error).toBeInstanceOf(LLMError);
+    expect(error.kind).toBe("network");
+  });
+});
+
+describe("checking a key with Anthropic", () => {
+  const models = {
+    data: [{ type: "model", id: "claude-opus-5-5" }],
+    has_more: true,
+    first_id: "claude-opus-5-5",
+    last_id: "claude-opus-5-5",
+  };
+
+  it("resolves when the key is accepted, without generating anything", async () => {
+    const { provider, calls } = providerFor(() => jsonResponse(models));
+    await expect(provider.checkKey()).resolves.toBeUndefined();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("GET");
+    expect(new URL(calls[0]?.url ?? "").pathname).toBe("/v1/models");
+    expect(calls[0]?.headers.get("authorization")).toBe("Bearer test-key");
+  });
+
+  it("reports a rejected key", async () => {
+    const { provider } = providerFor(() =>
+      errorResponse(401, {
+        type: "error",
+        error: { type: "authentication_error", message: "invalid x-api-key" },
+      }),
+    );
+    const error = await provider.checkKey().catch((e) => e);
+    expect(error).toBeInstanceOf(LLMError);
+    expect(error.kind).toBe("auth");
+  });
+
+  it("does not call a key rejected when the provider is failing", async () => {
+    const { provider } = providerFor(() =>
+      errorResponse(529, {
+        type: "error",
+        error: { type: "overloaded_error", message: "Overloaded" },
+      }),
+    );
+    const error = await provider.checkKey().catch((e) => e);
+    expect(error).toBeInstanceOf(LLMError);
+    expect(error.kind).not.toBe("auth");
+  });
+
+  it("reports a network failure", async () => {
+    const provider = createAnthropicProvider({
+      apiKey: "test-key",
+      maxRetries: 0,
+      fetch: async () => {
+        throw new TypeError("fetch failed");
+      },
+    });
+    const error = await provider.checkKey().catch((e) => e);
     expect(error).toBeInstanceOf(LLMError);
     expect(error.kind).toBe("network");
   });

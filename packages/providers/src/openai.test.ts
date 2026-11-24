@@ -7,6 +7,7 @@ import {
   fakeFetch,
   fixture,
   jsonRequest,
+  jsonResponse,
   sampleRequest,
   sseResponse,
 } from "./testing.ts";
@@ -141,6 +142,59 @@ describe("createOpenAIProvider", () => {
       },
     });
     const error = await collect(provider, sampleRequest).catch((e) => e);
+    expect(error).toBeInstanceOf(LLMError);
+    expect(error.kind).toBe("network");
+  });
+});
+
+describe("checking a key with OpenAI", () => {
+  const models = {
+    object: "list",
+    data: [{ id: "gpt-6.2-sol", object: "model", owned_by: "openai" }],
+  };
+
+  it("resolves when the key is accepted, without generating anything", async () => {
+    const { provider, calls } = providerFor(() => jsonResponse(models));
+    await expect(provider.checkKey()).resolves.toBeUndefined();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("GET");
+    expect(new URL(calls[0]?.url ?? "").pathname).toBe("/v1/models");
+    expect(calls[0]?.headers.get("authorization")).toBe("Bearer test-key");
+  });
+
+  it("reports a rejected key", async () => {
+    const { provider } = providerFor(() =>
+      errorResponse(401, {
+        error: {
+          message: "Incorrect API key provided",
+          code: "invalid_api_key",
+        },
+      }),
+    );
+    const error = await provider.checkKey().catch((e) => e);
+    expect(error).toBeInstanceOf(LLMError);
+    expect(error.kind).toBe("auth");
+  });
+
+  it("does not call a key rejected when the provider is failing", async () => {
+    const { provider } = providerFor(() =>
+      errorResponse(503, { error: { message: "Service unavailable" } }),
+    );
+    const error = await provider.checkKey().catch((e) => e);
+    expect(error).toBeInstanceOf(LLMError);
+    expect(error.kind).not.toBe("auth");
+  });
+
+  it("reports a network failure", async () => {
+    const provider = createOpenAIProvider({
+      apiKey: "test-key",
+      maxRetries: 0,
+      fetch: async () => {
+        throw new TypeError("fetch failed");
+      },
+    });
+    const error = await provider.checkKey().catch((e) => e);
     expect(error).toBeInstanceOf(LLMError);
     expect(error.kind).toBe("network");
   });

@@ -2,6 +2,7 @@ import {
   type CapturedContext,
   type LLMErrorKind,
   LOOKUP_MODES,
+  PROVIDER_IDS,
 } from "@lingo/core";
 import { z } from "zod";
 
@@ -70,11 +71,37 @@ export type LookupEvent =
 /** Name of the keyboard command declared in the manifest. */
 export const LOOKUP_COMMAND = "lookup-selection";
 
+/** Longest API key a check accepts, in characters. Real keys are far shorter. */
+const MAX_API_KEY_CHARS = 1000;
+
 const runtimeMessageSchema = z.discriminatedUnion("type", [
-  /** Content script to background. */
-  z.object({ type: z.literal("open-settings") }),
+  /**
+   * Opens, closes, or toggles the settings drawer of a tab. The lookup card
+   * and the drawer itself send it to the background, which passes it on to
+   * the top frame of their tab. The background also sends it on its own when
+   * the toolbar button is pressed. The top frame answers with a
+   * `DrawerAnswer`.
+   */
+  z.object({
+    type: z.literal("settings-drawer"),
+    action: z.enum(["open", "close", "toggle"]),
+  }),
+  /**
+   * The page inside the drawer to background: was this drawer opened by the
+   * extension just now? The answer is `true` or `false`.
+   */
+  z.object({ type: z.literal("settings-drawer-grant") }),
   /** Background to content script, when the keyboard shortcut is pressed. */
   z.object({ type: z.literal("lookup-selection") }),
+  /**
+   * Settings page to background: ask the provider whether it accepts a key.
+   * The answer is a `KeyCheckResult`.
+   */
+  z.object({
+    type: z.literal("check-api-key"),
+    provider: z.enum(PROVIDER_IDS),
+    apiKey: z.string().min(1).max(MAX_API_KEY_CHARS),
+  }),
 ]);
 
 /** One-off messages sent with `runtime.sendMessage` or `tabs.sendMessage`. */
@@ -92,3 +119,23 @@ export function parseLookupRequest(value: unknown): LookupRequest | undefined {
   const parsed = lookupRequestSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
+
+/**
+ * What a provider said about a key. Anything that is not one of these, such
+ * as no answer at all, reads as the provider not having been reached.
+ */
+export const keyCheckResultSchema = z
+  .enum(["accepted", "rejected", "unreachable"])
+  .catch("unreachable");
+
+export type KeyCheckResult = z.infer<typeof keyCheckResultSchema>;
+
+/** What the top frame did with a `settings-drawer` message. */
+export const drawerAnswerSchema = z.enum(["opened", "closed", "unchanged"]);
+
+export type DrawerAnswer = z.infer<typeof drawerAnswerSchema>;
+
+export type DrawerAction = Extract<
+  RuntimeMessage,
+  { type: "settings-drawer" }
+>["action"];

@@ -1,0 +1,17 @@
+@import "@lingo/ui/settings.css";
+
+/* What every page that shows the settings starts from. */
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}

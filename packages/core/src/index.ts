@@ -42,9 +42,11 @@ export {
   renderSystemPrompt,
 } from "./prompt.ts";
 export {
+  CONTEXT_CHAR_PRESETS,
   defaultSettings,
   languageName,
   MAX_CONTEXT_CHARS_LIMIT,
+  nativeLanguageName,
   normalizeSettings,
   PROVIDER_IDS,
   type ProviderId,

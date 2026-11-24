@@ -2,9 +2,14 @@
  * Stands in for the provider APIs in end-to-end tests. It also serves the
  * page the tests select text on.
  *
+ * - `GET /v1/models` is what a key check calls. It accepts any key except
+ *   the ones in `KEY_CHECKS`, which stand for the ways a check can go wrong.
  * - `POST /v1/messages` and `POST /v1/responses` stream a recorded answer
  *   from `spec/fixtures`: a dictionary entry as JSON when the request asks
- *   for a JSON schema, plain text otherwise. A key of `bad-key` gets a 401.
+ *   for a JSON schema, plain text otherwise. A key of `revoked-key` gets a
+ *   401 here, like a key that passed its check and was withdrawn later.
+ * - `GET /page` is the page the tests select text on. `GET /strict-page` is
+ *   the same page under a content security policy that forbids frames.
  * - `GET /requests` returns every request body received so far, so a test can
  *   check what the extension sent. `DELETE /requests` clears the list.
  */
@@ -31,6 +36,29 @@ const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "*",
   "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+};
+
+/** Keys that a check does not simply accept, and what happens instead. */
+const KEY_CHECKS: Record<string, "reject" | "drop" | "delay"> = {
+  "bad-key": "reject",
+  // The connection closes without an answer, as when the provider is down.
+  "offline-key": "drop",
+  // Accepted, but slowly enough for a test to see the check in progress.
+  "slow-key": "delay",
+};
+
+/** A model list in a shape both the Anthropic and the OpenAI SDK accept. */
+const MODELS = {
+  object: "list",
+  data: [{ id: "test-model", type: "model", object: "model" }],
+  has_more: false,
+  first_id: "test-model",
+  last_id: "test-model",
+};
+
+const UNAUTHORIZED = {
+  type: "error",
+  error: { type: "authentication_error", message: "invalid key" },
 };
 
 /** Recorded answers per endpoint: plain text, and JSON held to a schema. */
@@ -72,8 +100,9 @@ async function readBody(request: IncomingMessage): Promise<string> {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const server = createServer(async (request, response) => {
-  const path = request.url ?? "/";
+  const path = new URL(request.url ?? "/", "http://localhost").pathname;
   const json = { ...CORS, "content-type": "application/json" };
+  const key = request.headers.authorization?.replace("Bearer ", "") ?? "";
 
   if (request.method === "OPTIONS") {
     response.writeHead(204, CORS).end();
@@ -87,9 +116,36 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  // The same page, from a site that allows no frames and no outside content.
+  if (request.method === "GET" && path === "/strict-page") {
+    response
+      .writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "content-security-policy":
+          "default-src 'self'; style-src 'unsafe-inline'; frame-src 'none'",
+      })
+      .end(PAGE);
+    return;
+  }
+
   if (path === "/requests") {
     if (request.method === "DELETE") requests = [];
     response.writeHead(200, json).end(JSON.stringify(requests));
+    return;
+  }
+
+  if (request.method === "GET" && path === "/v1/models") {
+    const outcome = KEY_CHECKS[key];
+    if (outcome === "drop") {
+      request.socket.destroy();
+      return;
+    }
+    if (outcome === "reject") {
+      response.writeHead(401, json).end(JSON.stringify(UNAUTHORIZED));
+      return;
+    }
+    if (outcome === "delay") await sleep(1500);
+    response.writeHead(200, json).end(JSON.stringify(MODELS));
     return;
   }
 
@@ -98,11 +154,8 @@ const server = createServer(async (request, response) => {
     const body: unknown = JSON.parse(await readBody(request));
     requests.push({ path, body });
 
-    if (request.headers.authorization === "Bearer bad-key") {
-      const error = { type: "authentication_error", message: "invalid key" };
-      response
-        .writeHead(401, json)
-        .end(JSON.stringify({ type: "error", error }));
+    if (key === "revoked-key") {
+      response.writeHead(401, json).end(JSON.stringify(UNAUTHORIZED));
       return;
     }
 

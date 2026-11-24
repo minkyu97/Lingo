@@ -2,6 +2,7 @@ import type { ProviderId } from "@lingo/core";
 import { createProvider } from "@lingo/providers";
 import { browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
+import { checkApiKey } from "../src/key-check.ts";
 import { handleLookupPort } from "../src/lookup-handler.ts";
 import {
   isRuntimeMessage,
@@ -9,6 +10,7 @@ import {
   LOOKUP_PORT,
   type RuntimeMessage,
 } from "../src/messaging.ts";
+import { createSettingsDrawer } from "../src/settings-drawer.ts";
 import {
   loadApiKey,
   loadSettings,
@@ -21,6 +23,9 @@ import {
  */
 const E2E_BASE_URL: string | undefined = import.meta.env.WXT_E2E_LLM_BASE_URL;
 
+/** Where the build puts the script of `entrypoints/content`. */
+const CONTENT_SCRIPT = "/content-scripts/content.js";
+
 function baseURL(provider: ProviderId): string | undefined {
   if (!E2E_BASE_URL) return undefined;
   // The OpenAI SDK expects the version segment in its base URL.
@@ -30,7 +35,7 @@ function baseURL(provider: ProviderId): string | undefined {
 export default defineBackground(() => {
   void restrictStorageToTrustedContexts();
 
-  // API keys are read and provider calls are made here only, never in a
+  // API keys are used and provider calls are made here only, never in a
   // content script.
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== LOOKUP_PORT) return;
@@ -42,9 +47,49 @@ export default defineBackground(() => {
     });
   });
 
-  browser.runtime.onMessage.addListener((message) => {
-    if (isRuntimeMessage(message) && message.type === "open-settings") {
-      void browser.runtime.openOptionsPage();
+  const drawer = createSettingsDrawer({
+    sendToTopFrame: (tabId, message) =>
+      browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+    isLoading: async (tabId) =>
+      (await browser.tabs.get(tabId)).status === "loading",
+    // Allowed by `activeTab`, in the tab whose toolbar button was pressed.
+    startContentScript: (tabId) =>
+      browser.scripting.executeScript({
+        target: { tabId },
+        files: [CONTENT_SCRIPT],
+      }),
+    openOptionsPage: () => browser.runtime.openOptionsPage(),
+  });
+
+  // The toolbar button opens the settings inside the current page. There is
+  // no popup, which is what makes this event fire.
+  browser.action.onClicked.addListener((tab) => {
+    void drawer.request(tab.id, "toggle");
+  });
+
+  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!isRuntimeMessage(message)) return;
+    // The extension's own pages, as opposed to a content script, which runs
+    // inside a web page.
+    const fromOwnPage =
+      sender.url?.startsWith(browser.runtime.getURL("/")) ?? false;
+
+    switch (message.type) {
+      case "settings-drawer":
+        void drawer.request(sender.tab?.id, message.action);
+        return;
+      case "settings-drawer-grant":
+        sendResponse(fromOwnPage && drawer.claimGrant(sender.tab?.id));
+        return;
+      case "check-api-key":
+        // Only the extension's own pages have a key to check.
+        if (!fromOwnPage) return;
+        void checkApiKey(message.provider, message.apiKey, {
+          createProvider,
+          baseURL,
+        }).then(sendResponse);
+        // Keeps the channel open until the provider has answered.
+        return true;
     }
   });
 

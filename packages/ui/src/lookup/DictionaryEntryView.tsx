@@ -1,4 +1,6 @@
 import { type DictionaryEntry, groupSenses } from "@lingo/core";
+import { Badge } from "../controls/Badge.tsx";
+import { Callout } from "../controls/Callout.tsx";
 
 export interface DictionaryEntryViewProps {
   /** The entry so far. Fields that have not arrived yet are empty. */
@@ -33,10 +35,7 @@ export function DictionaryEntryView({
       )}
 
       {entry.contextMeaning && (
-        <div className="lingo-entry__context">
-          <p className="lingo-entry__label">In this context</p>
-          <p>{entry.contextMeaning}</p>
-        </div>
+        <Callout label="In this context">{entry.contextMeaning}</Callout>
       )}
 
       {groups.map((group) => (
@@ -55,10 +54,8 @@ export function DictionaryEntryView({
                 data-in-context={sense.inContext}
               >
                 <p className="lingo-entry__meaning">
-                  {sense.meaning}
-                  {sense.inContext && (
-                    <span className="lingo-entry__badge">in context</span>
-                  )}
+                  <span>{sense.meaning}</span>
+                  {sense.inContext && <Badge>in context</Badge>}
                 </p>
                 {sense.example && (
                   <p className="lingo-entry__example">{sense.example}</p>
