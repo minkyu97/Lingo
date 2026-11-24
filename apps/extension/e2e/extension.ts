@@ -36,6 +36,8 @@ export const test = base.extend<Fixtures>({
       args: [
         `--disable-extensions-except=${EXTENSION}`,
         `--load-extension=${EXTENSION}`,
+        // Lets a test press the toolbar button and reload the extension.
+        "--enable-unsafe-extension-debugging",
       ],
     });
     // A new install opens the settings in a tab, at a moment of its own
@@ -75,24 +77,61 @@ export interface TabsApi {
 }
 
 interface ActionApi {
-  onClicked: { dispatch(tab: { id?: number }): void };
+  onClicked: { hasListeners(): boolean };
+}
+
+/** A session with the browser itself, for what no page can be asked to do. */
+async function browserSession(context: BrowserContext) {
+  const browser = context.browser();
+  if (!browser) throw new Error("The context has no browser");
+  return browser.newBrowserCDPSession();
 }
 
 /**
  * Presses the extension's toolbar button while `page` is the tab in front.
- * Playwright cannot reach the toolbar, so this fires the event that a press
- * fires, and the extension's own listener takes it from there.
+ * The browser treats this as a real press, with the access that a press
+ * grants to the tab.
  */
-export async function pressToolbarButton(page: Page, worker: Worker) {
+export async function pressToolbarButton(page: Page, extensionId: string) {
   await page.bringToFront();
-  await worker.evaluate(async () => {
-    const { tabs, action } = (
-      globalThis as unknown as { chrome: { tabs: TabsApi; action: ActionApi } }
-    ).chrome;
-    const [tab] = await tabs.query({ active: true, lastFocusedWindow: true });
-    if (!tab) throw new Error("No tab is in front");
-    action.onClicked.dispatch(tab);
+  const session = await browserSession(page.context());
+  const { targetInfos } = await session.send("Target.getTargets", {
+    filter: [{ type: "tab" }],
   });
+  const tabs = targetInfos.filter((target) => target.url === page.url());
+  const [tab] = tabs;
+  if (!tab || tabs.length > 1) {
+    throw new Error(`Expected one tab at ${page.url()}, found ${tabs.length}`);
+  }
+  await session.send("Extensions.triggerAction", {
+    id: extensionId,
+    targetId: tab.targetId,
+  });
+  await session.detach();
+}
+
+/**
+ * Loads the extension again, as an update does, or a press of Reload on the
+ * extensions page. The content scripts in open tabs are cut off from it, like
+ * those of tabs that were open before the extension was installed.
+ */
+export async function reloadExtension(context: BrowserContext) {
+  const session = await browserSession(context);
+  const restarted = context.waitForEvent("serviceworker");
+  await session.send("Extensions.loadUnpacked", { path: EXTENSION });
+  const worker = await restarted;
+  await session.detach();
+  // A press of the toolbar button is lost until the new service worker has
+  // said that it listens for one.
+  await expect
+    .poll(() =>
+      worker.evaluate(() =>
+        (
+          globalThis as unknown as { chrome: { action: ActionApi } }
+        ).chrome.action.onClicked.hasListeners(),
+      ),
+    )
+    .toBe(true);
 }
 
 /**

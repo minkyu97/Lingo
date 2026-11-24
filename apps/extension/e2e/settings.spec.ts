@@ -6,6 +6,7 @@ import {
   expect,
   openTestPage,
   pressToolbarButton,
+  reloadExtension,
   test,
   waitUntilListening,
 } from "./extension.ts";
@@ -29,13 +30,14 @@ async function expectDocked(page: Page) {
 
 test("opens inside the page when the toolbar button is pressed", async ({
   context,
+  extensionId,
   worker,
 }, testInfo) => {
   const page = await openTestPage(context);
   await waitUntilListening(page, worker);
   const tabs = context.pages().length;
 
-  await pressToolbarButton(page, worker);
+  await pressToolbarButton(page, extensionId);
   await expect(
     drawer(page).getByRole("heading", { name: "Settings" }),
   ).toBeVisible();
@@ -61,43 +63,70 @@ test("opens inside the page when the toolbar button is pressed", async ({
   await expect(drawerFrame(page)).toHaveCount(0);
 });
 
-test("closes on a second press and on Escape", async ({ context, worker }) => {
+test("closes on a second press and on Escape", async ({
+  context,
+  extensionId,
+  worker,
+}) => {
   const page = await openTestPage(context);
   await waitUntilListening(page, worker);
   const heading = drawer(page).getByRole("heading", { name: "Settings" });
 
-  await pressToolbarButton(page, worker);
+  await pressToolbarButton(page, extensionId);
   await expect(heading).toBeVisible();
-  await pressToolbarButton(page, worker);
+  await pressToolbarButton(page, extensionId);
   await expect(drawerFrame(page)).toHaveCount(0);
 
   // Escape, with the keyboard inside the drawer.
-  await pressToolbarButton(page, worker);
+  await pressToolbarButton(page, extensionId);
   await expect(heading).toBeVisible();
   await heading.click();
   await page.keyboard.press("Escape");
   await expect(drawerFrame(page)).toHaveCount(0);
 
   // Escape, with the keyboard in the page.
-  await pressToolbarButton(page, worker);
+  await pressToolbarButton(page, extensionId);
   await expect(heading).toBeVisible();
   await page.locator("h1").click();
   await page.keyboard.press("Escape");
   await expect(drawerFrame(page)).toHaveCount(0);
 });
 
-test("opens in a tab where the page cannot hold it", async ({
+test("opens inside a page that was open before the extension was", async ({
   context,
+  extensionId,
   worker,
 }) => {
-  // No content script runs in a blank tab.
-  const blank = await context.newPage();
-  await pressToolbarButton(blank, worker);
+  const page = await openTestPage(context);
+  await waitUntilListening(page, worker);
+  // From here on the page is like one that was open before the extension
+  // was installed: nothing in it answers the extension.
+  await reloadExtension(context);
 
-  // Chrome may open the settings in a new tab or in the blank one.
+  await pressToolbarButton(page, extensionId);
+  await expect(
+    drawer(page).getByRole("heading", { name: "Settings" }),
+  ).toBeVisible();
+  // In the page, and not in a tab of its own.
+  expect(context.pages().map((tab) => tab.url())).not.toContainEqual(
+    expect.stringContaining("options.html"),
+  );
+  // The new content script has taken the place of the one that was cut off.
+  await expect(page.locator("lingo-ui")).toHaveCount(1);
+});
+
+test("opens in a tab where the page cannot hold it", async ({
+  context,
+  extensionId,
+}) => {
+  // No extension may run a script in one of the browser's own pages.
+  const browserPage = await context.newPage();
+  await browserPage.goto("chrome://version/");
+  await pressToolbarButton(browserPage, extensionId);
+
   const isSettings = (page: Page) => page.url().includes("options.html");
   await expect.poll(() => context.pages().some(isSettings)).toBe(true);
-  const settings = context.pages().find(isSettings) ?? blank;
+  const settings = context.pages().find(isSettings) ?? browserPage;
   await expect(
     settings.getByRole("heading", { name: "Settings" }),
   ).toBeVisible();
@@ -105,11 +134,15 @@ test("opens in a tab where the page cannot hold it", async ({
   await expect(settings.getByRole("button", { name: "Close" })).toHaveCount(0);
 });
 
-test("opens inside a page that forbids frames", async ({ context, worker }) => {
+test("opens inside a page that forbids frames", async ({
+  context,
+  extensionId,
+  worker,
+}) => {
   const page = await openTestPage(context, "/strict-page");
   await waitUntilListening(page, worker);
 
-  await pressToolbarButton(page, worker);
+  await pressToolbarButton(page, extensionId);
   await expect(
     drawer(page).getByRole("heading", { name: "Settings" }),
   ).toBeVisible();
@@ -137,13 +170,14 @@ test("shows no settings in a frame the extension did not open", async ({
 
 test("follows the system theme inside the drawer", async ({
   context,
+  extensionId,
   worker,
 }, testInfo) => {
   const page = await openTestPage(context);
   await waitUntilListening(page, worker);
   await page.emulateMedia({ colorScheme: "dark" });
 
-  await pressToolbarButton(page, worker);
+  await pressToolbarButton(page, extensionId);
   const panel = drawer(page).locator(".lingo-settings");
   await expect(panel).toBeVisible();
   await expect(panel).toHaveCSS("background-color", "rgb(31, 35, 40)");

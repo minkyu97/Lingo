@@ -23,6 +23,9 @@ import {
  */
 const E2E_BASE_URL: string | undefined = import.meta.env.WXT_E2E_LLM_BASE_URL;
 
+/** Where the build puts the script of `entrypoints/content`. */
+const CONTENT_SCRIPT = "/content-scripts/content.js";
+
 function baseURL(provider: ProviderId): string | undefined {
   if (!E2E_BASE_URL) return undefined;
   // The OpenAI SDK expects the version segment in its base URL.
@@ -47,6 +50,14 @@ export default defineBackground(() => {
   const drawer = createSettingsDrawer({
     sendToTopFrame: (tabId, message) =>
       browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+    isLoading: async (tabId) =>
+      (await browser.tabs.get(tabId)).status === "loading",
+    // Allowed by `activeTab`, in the tab whose toolbar button was pressed.
+    startContentScript: (tabId) =>
+      browser.scripting.executeScript({
+        target: { tabId },
+        files: [CONTENT_SCRIPT],
+      }),
     openOptionsPage: () => browser.runtime.openOptionsPage(),
   });
 
