@@ -7,7 +7,7 @@
  *
  *   pnpm live:page-translation \
  *     [--provider anthropic] [--model claude-haiku-5-5] [--language ko] \
- *     [--scrolls 3] [--click selector] [--keep-link-text] \
+ *     [--scrolls 3] [--click selector] \
  *     [--out test-results/page-translation-live] [url ...]
  *
  * The end-to-end build sends its requests to a local address. This script
@@ -45,7 +45,6 @@ const { values: flags, positionals } = parseArgs({
     language: { type: "string", default: "ko" },
     scrolls: { type: "string", default: "3" },
     out: { type: "string", default: "test-results/page-translation-live" },
-    "keep-link-text": { type: "boolean", default: false },
     /** A selector to click once the page is translated. */
     click: { type: "string" },
     "requests-per-second": { type: "string", default: "3" },
@@ -291,6 +290,7 @@ interface Progress {
   failed: number;
   requests: number;
   reused: number;
+  lossy: number;
   failures: Record<string, number>;
 }
 
@@ -409,7 +409,6 @@ async function run() {
       model: flags.model,
       language: flags.language,
       pageTranslation: {
-        keepLinkText: flags["keep-link-text"],
         requestsPerSecond: Number(flags["requests-per-second"]),
       },
     },

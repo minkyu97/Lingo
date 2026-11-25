@@ -30,6 +30,7 @@ interface Progress {
   failed: number;
   requests: number;
   reused: number;
+  lossy: number;
   failures: Record<string, number>;
 }
 
@@ -206,23 +207,13 @@ test("keeps styles, links, and listeners, and leaves code alone", async ({
   expect(sent).not.toContain("const total");
   expect(sent).toContain("Call <k1>fetchData()</k1> before rendering.");
 
-  // A translation whose tags do not fit is not used.
+  // A translation that comes back twice without its tags is shown without
+  // the formatting they stood for. The element is still in the page.
   expect(await text(page, "#broken")).toBe(
-    "This one comes back (broken) with its tags lost.",
+    "THIS ONE COMES BACK (BROKEN) WITH ITS TAGS LOST.",
   );
-  expect((await progress(page))?.failures).toEqual({ missing: 1 });
-});
-
-test("can leave the text of links as it is", async ({ context, worker }) => {
-  await configure(worker, { keepLinkText: true });
-  const page = await openLongPage(context, worker);
-
-  await toggleTranslation(worker);
-  await expectSettled(page);
-
-  expect(await text(page, "#link")).toBe("a link");
-  expect(await text(page, "#bold")).toBe("BOLD WORDS");
-  expect(await page.locator("#link").getAttribute("href")).toBe("/page");
+  expect(await text(page, "#broken b")).toBe("");
+  expect(await progress(page)).toMatchObject({ lossy: 1, failed: 0 });
 });
 
 test("sends no more requests per second than the settings allow", async ({
@@ -316,7 +307,5 @@ test("puts the page back exactly as it was", async ({ context, worker }) => {
   await expect(page.locator("h1")).toHaveText("LONG PAGE");
   await expectSettled(page);
   expect(await text(page, "#p1")).toBe("PARAGRAPH 1 OF THE LONG PAGE.");
-  // Only the paragraph whose answer was unusable is asked for again: once
-  // with whatever else is waiting, and once on its own.
-  expect((await recordedRequests(page)).length).toBe(requests + 2);
+  expect((await recordedRequests(page)).length).toBe(requests);
 });

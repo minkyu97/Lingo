@@ -110,8 +110,9 @@ describe("handlePageTranslationPort", () => {
         requestsPerSecond: 5,
         aheadViewports: 1,
         batchChars: 1500,
-        keepLinkText: false,
       },
+      targetLanguage: "ko",
+      provider: "Anthropic",
     });
   });
 

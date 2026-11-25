@@ -31,6 +31,9 @@ const KIND: Record<Exclude<MarkupNode["type"], "text">, SlotKind> = {
 
 const isText = (node: Node): node is Text => node.nodeType === Node.TEXT_NODE;
 
+/** Any inline tag, as text. */
+const TAG_TEXT = /<\/?[gkx]\d+\s*\/?>/g;
+
 /**
  * Checks a translation against the unit it is for, and works out what each
  * container is to hold.
@@ -40,12 +43,21 @@ const isText = (node: Node): node is Text => node.nodeType === Node.TEXT_NODE;
  * another tag than before. What cannot be mended is a tag of the unit that
  * is nowhere in the translation, because there is no telling where its
  * element belongs. That is the reason returned.
+ *
+ * With `lossy`, such a translation is used all the same. An element whose
+ * tag is missing stays in the page, after the translated text: a group
+ * without its words, so it shows nothing, and kept text or an image as it
+ * is. Tags that do not pair up are all dropped.
  */
 function plan(
   unit: Unit,
   translation: string,
+  lossy: boolean,
 ): Map<Container, MarkupNode[]> | RewriteFailure {
-  const tree = parseMarkup(translation.trim());
+  const text = translation.trim();
+  const tree =
+    parseMarkup(text) ??
+    (lossy ? parseMarkup(text.replace(TAG_TEXT, "")) : undefined);
   if (!tree) return "unpaired";
 
   const plans = new Map<Container, MarkupNode[]>();
@@ -77,7 +89,13 @@ function plan(
     return fitting;
   };
   plans.set(unit.root, fit(tree, unit.root));
-  return placed.size === unit.slots.size ? plans : "missing";
+  if (placed.size === unit.slots.size) return plans;
+  if (!lossy) return "missing";
+
+  for (const [id, slot] of unit.slots) {
+    if (!placed.has(id) && slot.content) plans.set(slot.content, []);
+  }
+  return plans;
 }
 
 /** Why a translation does not fit the unit's tags, if it does not. */
@@ -85,8 +103,16 @@ export function checkTranslation(
   unit: Unit,
   translation: string,
 ): RewriteFailure | undefined {
-  const plans = plan(unit, translation);
+  const plans = plan(unit, translation, false);
   return typeof plans === "string" ? plans : undefined;
+}
+
+export interface ApplyOptions {
+  /**
+   * Use a translation that lacks tags of the unit, at the cost of the
+   * formatting or links they stood for.
+   */
+  lossy?: boolean;
 }
 
 /**
@@ -96,8 +122,9 @@ export function checkTranslation(
 export function applyTranslation(
   unit: Unit,
   translation: string,
+  { lossy = false }: ApplyOptions = {},
 ): RewriteFailure | undefined {
-  const plans = plan(unit, translation);
+  const plans = plan(unit, translation, lossy);
   if (typeof plans === "string") return plans;
   if (!isAttached(unit)) return "detached";
 

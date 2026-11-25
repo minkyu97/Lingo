@@ -1,23 +1,21 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { applyTranslation, restoreUnit } from "./rewrite.ts";
-import { type ScanOptions, scanHost, type Unit } from "./units.ts";
-
-const OPTIONS: ScanOptions = { keepLinkText: false };
+import { scanHost, type Unit } from "./units.ts";
 
 beforeEach(() => {
   document.body.innerHTML = "";
 });
 
 /** Puts HTML in the page and returns the units of its first element. */
-function unitsOf(html: string, options = OPTIONS): Unit[] {
+function unitsOf(html: string): Unit[] {
   document.body.innerHTML = html;
   const host = document.body.firstElementChild;
   if (!host) throw new Error("The HTML has no element");
-  return scanHost(host, options).units;
+  return scanHost(host).units;
 }
 
-function unitOf(html: string, options = OPTIONS): Unit {
-  const [unit, ...others] = unitsOf(html, options);
+function unitOf(html: string): Unit {
+  const [unit, ...others] = unitsOf(html);
   if (!unit || others.length > 0) throw new Error("Expected one unit");
   return unit;
 }
@@ -64,12 +62,10 @@ describe("scanHost", () => {
     expect(unit.root.parent).toBe(document.querySelector("span"));
   });
 
-  it("can keep the text of links", () => {
-    const options = { keepLinkText: true };
-    const unit = unitOf('<p>See the <a href="/d">docs</a> first.</p>', options);
-    expect(unit.source).toBe("See the <k1>docs</k1> first.");
-    // A run that is nothing but a link has nothing left to translate.
-    expect(unitsOf('<li><a href="/">Home</a></li>', options)).toEqual([]);
+  it("translates the text of links, and tags them like other formatting", () => {
+    const unit = unitOf('<p>See the <a href="/d">docs</a> first.</p>');
+    expect(unit.source).toBe("See the <g1>docs</g1> first.");
+    expect(unitOf('<li><a href="/">Home</a></li>').source).toBe("Home");
   });
 
   it("skips text without words", () => {
@@ -81,7 +77,7 @@ describe("scanHost", () => {
     document.body.innerHTML =
       "<div>Before <b>it</b><p>Inside</p>After<pre>code()</pre></div>";
     const host = document.body.firstElementChild as Element;
-    const scan = scanHost(host, OPTIONS);
+    const scan = scanHost(host);
 
     expect(scan.units.map((unit) => unit.source)).toEqual([
       "Before <g1>it</g1>",
@@ -221,6 +217,64 @@ describe("applyTranslation", () => {
       applyTranslation(unit, "<g1>여기</g1>로, 바로 <g1>여기</g1>로."),
     ).toBeUndefined();
     expect(html()).toBe('<p><a href="/x">여기</a>로, 바로 여기로.</p>');
+  });
+
+  describe("when asked to use a translation that lacks tags", () => {
+    it("drops the words of a group that is missing, and keeps the element", () => {
+      const unit = unitOf(
+        '<p>Go <a href="/x">here</a> and be <b>bold</b>.</p>',
+      );
+      const link = document.querySelector("a");
+
+      expect(
+        applyTranslation(unit, "여기로 가서 <g2>굵게</g2> 되어라.", {
+          lossy: true,
+        }),
+      ).toBeUndefined();
+
+      // The link is still in the page, with nothing in it to show.
+      expect(html()).toBe(
+        '<p>여기로 가서 <b>굵게</b> 되어라.<a href="/x"></a></p>',
+      );
+      expect(document.querySelector("a")).toBe(link);
+      expect(unit.translated).toBe(true);
+    });
+
+    it("keeps kept text and images, after the translated text", () => {
+      const unit = unitOf(
+        '<p>Call <code>fetch()</code> to load<img src="x.png"> data.</p>',
+      );
+      expect(
+        applyTranslation(unit, "데이터를 불러오세요.", { lossy: true }),
+      ).toBeUndefined();
+      expect(html()).toBe(
+        '<p>데이터를 불러오세요.<code>fetch()</code><img src="x.png"></p>',
+      );
+    });
+
+    it("empties what is nested in a missing group too", () => {
+      const unit = unitOf("<p>A <b>big <i>red</i> dog</b> ran.</p>");
+      expect(
+        applyTranslation(unit, "큰 빨간 개가 달렸다.", { lossy: true }),
+      ).toBeUndefined();
+      expect(html()).toBe("<p>큰 빨간 개가 달렸다.<b><i></i></b></p>");
+    });
+
+    it("drops every tag when they do not pair up", () => {
+      const unit = unitOf('<p>Go <a href="/x">here</a> now.</p>');
+      expect(
+        applyTranslation(unit, "지금 <g1>여기로 가라.", { lossy: true }),
+      ).toBeUndefined();
+      expect(html()).toBe('<p>지금 여기로 가라.<a href="/x"></a></p>');
+    });
+
+    it("puts everything back on a restore", () => {
+      const source = '<p>Go <a href="/x">here</a> and be <b>bold</b>.</p>';
+      const unit = unitOf(source);
+      applyTranslation(unit, "여기로 가서 굵게 되어라.", { lossy: true });
+      restoreUnit(unit);
+      expect(html()).toBe(source);
+    });
   });
 
   it("refuses to write where the page has taken a node away", () => {

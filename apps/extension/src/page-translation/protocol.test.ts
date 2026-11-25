@@ -66,7 +66,6 @@ describe("pageTranslationOptionsSchema", () => {
     requestsPerSecond: 3,
     aheadViewports: 1,
     batchChars: 1500,
-    keepLinkText: false,
   };
 
   it("falls back to the defaults for what is missing", () => {
@@ -80,9 +79,9 @@ describe("pageTranslationOptionsSchema", () => {
       pageTranslationOptionsSchema.parse({
         requestsPerSecond: 10,
         aheadViewports: 99,
-        keepLinkText: true,
+        batchChars: 400,
       }),
-    ).toEqual({ ...defaults, requestsPerSecond: 10, keepLinkText: true });
+    ).toEqual({ ...defaults, requestsPerSecond: 10, batchChars: 400 });
     expect(
       pageTranslationOptionsSchema.parse({ requestsPerSecond: 0 }),
     ).toEqual(defaults);

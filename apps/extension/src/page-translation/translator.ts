@@ -3,12 +3,12 @@
  * text near the viewport, more as the page is scrolled or grows, and all of
  * it undone when translation is turned off.
  */
-import type { PageSegment } from "@lingo/core";
+import type { LLMErrorKind, PageSegment } from "@lingo/core";
 import {
   MAX_BATCH_SEGMENTS,
+  type PageConfig,
   type PageEvent,
   type PageRequest,
-  type PageTranslationOptions,
 } from "./protocol.ts";
 import { applyTranslation, checkTranslation, restoreUnit } from "./rewrite.ts";
 import {
@@ -39,13 +39,38 @@ export interface PageTranslationProgress {
   requests: number;
   /** Pieces translated from an earlier answer, without a request. */
   reused: number;
+  /** Pieces shown translated without some of their formatting or links. */
+  lossy: number;
   /** How often each kind of failure happened. */
   failures: Record<string, number>;
+}
+
+/**
+ * Why translation has stopped and waits for the user:
+ * - a kind of provider failure, as for a lookup
+ * - `interrupted`: the background kept going away
+ * - `updated`: the extension was reloaded or updated under this page
+ */
+export type PageProblem = LLMErrorKind | "interrupted" | "updated";
+
+/** What an interface needs to know to show where page translation stands. */
+export interface PageTranslationStatus {
+  active: boolean;
+  /** What the background said when translation started. */
+  config?: PageConfig;
+  problem?: PageProblem;
 }
 
 export interface PageTranslatorEnv {
   /** Opens a port to the background. Throws when the extension is gone. */
   connect(): TranslatorPort;
+  /** Told when translation starts, stops, runs into a problem, or gets past it. */
+  onStatus?(status: PageTranslationStatus): void;
+  /**
+   * Told when a piece of text starts or stops waiting for its translation,
+   * so that the page can show which ones are on their way.
+   */
+  onPending?(unit: Unit, pending: boolean): void;
   /** Told whenever the numbers have changed. */
   onProgress?(progress: PageTranslationProgress): void;
 }
@@ -55,6 +80,8 @@ export interface PageTranslator {
   start(): void;
   /** Stops translating and puts the page back as it was. */
   stop(): void;
+  /** Goes on after a problem, with what was waiting when it came up. */
+  retry(): void;
 }
 
 /**
@@ -63,6 +90,17 @@ export interface PageTranslator {
  * - `sent`: in a request
  */
 type State = "idle" | "queued" | "sent" | "done" | "failed";
+
+const isPending = (state: State) => state === "queued" || state === "sent";
+
+/** A translation, and whether it is used although it lacks some tags. */
+interface Translation {
+  text: string;
+  lossy: boolean;
+}
+
+/** Failures of a request that a later one may not have. */
+const PASSING: ReadonlySet<string> = new Set(["rate_limit", "network"]);
 
 interface Tracked {
   unit: Unit;
@@ -81,7 +119,7 @@ interface Tracked {
 /** A piece of text longer than this is left alone, in characters. */
 const MAX_UNIT_CHARS = 8000;
 
-/** How often one piece of text is sent again after a failure that may pass. */
+/** How often one piece of text is sent before its failure is final. */
 const MAX_ATTEMPTS = 2;
 
 /** How long to hold back after the provider said to slow down. */
@@ -107,11 +145,11 @@ const parentOf = (node: Node): Node | null =>
 
 export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
   let active = false;
-  let options: PageTranslationOptions | undefined;
+  let config: PageConfig | undefined;
   let port: TranslatorPort | undefined;
   let waitingForPermit = false;
-  /** Set by a failure that sending again will not fix, such as a missing key. */
-  let halted = false;
+  /** Set when sending again will not help until the user has done something. */
+  let problem: PageProblem | undefined;
   let pausedUntil = 0;
   let closedInARow = 0;
   let lastBatch = 0;
@@ -130,10 +168,11 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
   /** Per request, the units waiting for each of its segments. */
   const inFlight = new Map<number, Map<number, Tracked[]>>();
   /** Translations by source text. Kept when translation is turned off. */
-  const cache = new Map<string, string>();
+  const cache = new Map<string, Translation>();
   const counts = {
     requests: 0,
     reused: 0,
+    lossy: 0,
     failures: {} as Record<string, number>,
   };
 
@@ -156,15 +195,37 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
         failed: count("failed"),
         requests: counts.requests,
         reused: counts.reused,
+        lossy: counts.lossy,
         failures: { ...counts.failures },
       });
     });
   }
 
-  function fail(item: Tracked, reason: string) {
-    item.state = "failed";
-    counts.failures[reason] = (counts.failures[reason] ?? 0) + 1;
+  const announce = () => env.onStatus?.({ active, config, problem });
+
+  function setState(item: Tracked, state: State) {
+    const before = isPending(item.state);
+    item.state = state;
+    if (before !== isPending(state)) env.onPending?.(item.unit, !before);
     report();
+  }
+
+  function fail(item: Tracked, reason: string) {
+    counts.failures[reason] = (counts.failures[reason] ?? 0) + 1;
+    setState(item, "failed");
+  }
+
+  /**
+   * Stops asking until the user has dealt with the problem. What was waiting
+   * shows its own text again, and stays in mind for `retry`.
+   */
+  function halt(reason: PageProblem) {
+    problem = reason;
+    for (const item of [...queue]) {
+      queue.delete(item);
+      setState(item, "idle");
+    }
+    announce();
   }
 
   // ---- Writing to the page ------------------------------------------------
@@ -180,19 +241,19 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
     if (earlier.length > 0) queueMicrotask(() => onMutations(earlier));
   }
 
-  function finish(item: Tracked, translation: string) {
+  function finish(item: Tracked, translation: Translation) {
     if (!tracked.has(item)) return;
     let failure: string | undefined;
     write(() => {
-      failure = applyTranslation(item.unit, translation);
+      failure = applyTranslation(item.unit, translation.text, translation);
     });
     if (failure) {
       fail(item, failure);
       return;
     }
-    item.state = "done";
+    if (translation.lossy) counts.lossy += 1;
     for (const node of item.unit.created) owners.set(node, item);
-    report();
+    setState(item, "done");
   }
 
   // ---- Keeping track of units ---------------------------------------------
@@ -237,6 +298,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
   function drop(item: Tracked) {
     if (!tracked.delete(item)) return;
     queue.delete(item);
+    if (isPending(item.state)) env.onPending?.(item.unit, false);
     for (const node of nodesOf(item.unit)) owners.delete(node);
 
     const { host } = item.unit;
@@ -259,12 +321,12 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
    * With `deep`, elements that were read before are read again.
    */
   function scan(host: Element, deep: boolean, fresh?: Set<Element>) {
-    if (!options) return;
+    if (!config) return;
     dropHost(host);
     visited.add(host);
     fresh?.add(host);
 
-    const found = scanHost(host, options);
+    const found = scanHost(host);
     for (const root of found.shadowRoots) observe(root);
     for (const unit of found.units) track(unit);
     for (const child of found.children) {
@@ -281,16 +343,15 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
       if (known !== undefined) {
         counts.reused += 1;
         finish(item, known);
-      } else {
-        item.state = "queued";
+      } else if (!problem) {
         queue.add(item);
+        setState(item, "queued");
       }
     } else if (!item.near && item.state === "queued") {
       // Scrolled past before its turn came: not worth a request.
-      item.state = "idle";
       queue.delete(item);
+      setState(item, "idle");
     }
-    report();
   }
 
   function onVisibility(entries: IntersectionObserverEntry[]) {
@@ -363,14 +424,14 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
 
   /** Asks for leave to send a request, when there is something to send. */
   function pump() {
-    if (!active || halted || waitingForPermit || queue.size === 0) return;
+    if (!active || problem || waitingForPermit || queue.size === 0) return;
     if (Date.now() < pausedUntil) return;
     if (post({ type: "permit" })) waitingForPermit = true;
   }
 
   function send() {
-    if (!options) return;
-    const groups = nextBatch(options.batchChars);
+    if (!config) return;
+    const groups = nextBatch(config.options.batchChars);
     if (groups.length === 0) return;
 
     lastBatch += 1;
@@ -381,9 +442,9 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
       waiting.set(id, group);
       segments.push({ id, text: group[0]?.unit.source ?? "" });
       for (const item of group) {
-        item.state = "sent";
         item.attempts += 1;
         queue.delete(item);
+        setState(item, "sent");
       }
     });
     inFlight.set(lastBatch, waiting);
@@ -404,8 +465,15 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
       fail(item, reason);
       return;
     }
-    item.state = "idle";
+    setState(item, "idle");
     consider(item);
+  }
+
+  /** Takes a unit out of line, to be asked for afresh after a `retry`. */
+  function shelve(item: Tracked) {
+    if (!tracked.has(item)) return;
+    item.attempts = 0;
+    setState(item, "idle");
   }
 
   // ---- Talking to the background ------------------------------------------
@@ -421,7 +489,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
       return opened;
     } catch {
       // The extension was reloaded or updated under this page.
-      halted = true;
+      halt("updated");
       return undefined;
     }
   }
@@ -446,11 +514,19 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
       ...batch.values(),
     ]);
     inFlight.clear();
-    for (const item of interrupted.flat()) requeue(item, "interrupted");
     if (!active) return;
 
     closedInARow += 1;
-    if (closedInARow > MAX_RECONNECTS) halted = true;
+    if (closedInARow > MAX_RECONNECTS) {
+      for (const item of interrupted.flat()) shelve(item);
+      halt("interrupted");
+      return;
+    }
+    // Being cut off is not the unit's failure, so it does not count as a try.
+    for (const item of interrupted.flat()) {
+      item.attempts -= 1;
+      requeue(item, "interrupted");
+    }
     // Opens a new port if there is still something to send.
     pump();
   }
@@ -458,7 +534,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
   function onEvent(event: PageEvent) {
     switch (event.type) {
       case "config":
-        if (!options) begin(event.options);
+        if (!config) begin(event);
         return;
       case "permit":
         waitingForPermit = false;
@@ -473,21 +549,25 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
         if (!items || !first) return;
         batch?.delete(event.id);
 
-        const failure = checkTranslation(first.unit, event.text);
-        if (failure) {
+        const misfit = checkTranslation(first.unit, event.text);
+        if (misfit && first.attempts < MAX_ATTEMPTS) {
           for (const item of items) {
             item.alone = true;
-            requeue(item, failure);
+            requeue(item, misfit);
           }
           return;
         }
-        cache.set(first.unit.source, event.text);
-        for (const item of items) finish(item, event.text);
+        // A second answer that does not fit either is used as far as it
+        // goes: the text is translated, and what its lost tags stood for
+        // is given up.
+        const translation = { text: event.text, lossy: misfit !== undefined };
+        cache.set(first.unit.source, translation);
+        for (const item of items) finish(item, translation);
         // The page may have shown the same text again in the meantime.
         for (const item of [...queue]) {
           if (item.unit.source !== first.unit.source) continue;
           queue.delete(item);
-          finish(item, event.text);
+          finish(item, translation);
         }
         return;
       }
@@ -501,23 +581,25 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
         return;
       }
       case "error": {
-        const lost = inFlight.get(event.batch);
+        const lost = [...(inFlight.get(event.batch)?.values() ?? [])].flat();
         inFlight.delete(event.batch);
-        const mayPass = event.kind === "rate_limit" || event.kind === "network";
-        if (mayPass) {
+
+        if (event.kind === "refusal") {
+          // The model declined this text. The rest of the page goes on.
+          for (const item of lost) if (tracked.has(item)) fail(item, "refusal");
+          pump();
+          return;
+        }
+        const triedEnough = lost.some((item) => item.attempts >= MAX_ATTEMPTS);
+        if (PASSING.has(event.kind) && !triedEnough) {
           pausedUntil = Date.now() + RETRY_PAUSE_MS;
           setTimeout(pump, RETRY_PAUSE_MS);
+          for (const item of lost) requeue(item, event.kind);
+          return;
         }
-        if (event.kind === "missing_key" || event.kind === "auth") {
-          halted = true;
-        }
-        for (const items of lost?.values() ?? []) {
-          for (const item of items) {
-            if (mayPass) requeue(item, event.kind);
-            else if (tracked.has(item)) fail(item, event.kind);
-          }
-        }
-        pump();
+        // Nothing more will get through until the user steps in.
+        for (const item of lost) shelve(item);
+        halt(event.kind);
         return;
       }
       case "ping":
@@ -561,20 +643,19 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
     return undefined;
   }
 
-  function insideSkipped(node: Node, settings: PageTranslationOptions) {
+  function insideSkipped(node: Node) {
     for (
       let current: Node | null = node;
       current;
       current = parentOf(current)
     ) {
-      if (isElement(current) && isSkipped(current, settings)) return true;
+      if (isElement(current) && isSkipped(current)) return true;
     }
     return false;
   }
 
   function onMutations(records: MutationRecord[]) {
-    if (!active || !options) return;
-    const settings = options;
+    if (!active || !config) return;
     /** Units whose text the page changed. */
     const stale = new Set<Tracked>();
     /** Elements whose own text has to be split again. */
@@ -590,7 +671,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
 
     for (const record of records) {
       const { target } = record;
-      if (insideSkipped(target, settings)) continue;
+      if (insideSkipped(target)) continue;
 
       const owner = ownerOf(target);
       if (owner === "untouched") continue;
@@ -613,7 +694,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
         if (isElement(node)) removedElements = true;
       }
       for (const node of record.addedNodes) {
-        if (isElement(node) && !flowsInline(node, settings)) added.add(node);
+        if (isElement(node) && !flowsInline(node)) added.add(node);
         else if (isElement(node)) noteHost(target);
         else if (isText(node) && node.data.trim() !== "") noteHost(target);
       }
@@ -636,7 +717,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
     const fresh = new Set<Element>();
     for (const element of added) {
       if (!element.isConnected || fresh.has(element)) continue;
-      if (insideSkipped(element, settings)) continue;
+      if (insideSkipped(element)) continue;
       scan(element, true, fresh);
     }
     pump();
@@ -656,12 +737,13 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
 
   // ---- Turning on and off -------------------------------------------------
 
-  function begin(received: PageTranslationOptions) {
-    options = received;
+  function begin(received: PageConfig) {
+    config = received;
     // A scroll margin widens the viewport and every scrolling box inside the
     // page alike. A root margin on top of it would count twice for the page
     // itself, so it is only the fallback where there is no scroll margin.
-    const ahead = Math.round(received.aheadViewports * window.innerHeight);
+    const { aheadViewports } = received.options;
+    const ahead = Math.round(aheadViewports * window.innerHeight);
     const margin = `${ahead}px 0px`;
     const init: IntersectionObserverInit & { scrollMargin?: string } =
       "scrollMargin" in IntersectionObserver.prototype
@@ -672,6 +754,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
     observed = new WeakSet();
     observe(document.body);
     scan(document.body, true);
+    announce();
     report();
   }
 
@@ -683,8 +766,9 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
     start() {
       if (active) return;
       active = true;
-      halted = false;
+      problem = undefined;
       closedInARow = 0;
+      announce();
       // The background answers with the options, which is what starts it.
       connect();
       report();
@@ -702,6 +786,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
       mutations = undefined;
 
       for (const item of tracked) {
+        if (isPending(item.state)) env.onPending?.(item.unit, false);
         if (item.unit.translated) restoreUnit(item.unit);
       }
       tracked.clear();
@@ -712,10 +797,22 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
       visited = new WeakSet();
       nearHosts = new WeakSet();
       rescans = new WeakMap();
-      options = undefined;
+      config = undefined;
+      problem = undefined;
       waitingForPermit = false;
       pausedUntil = 0;
+      announce();
       report();
+    },
+
+    retry() {
+      if (!active || !problem) return;
+      problem = undefined;
+      closedInARow = 0;
+      pausedUntil = 0;
+      announce();
+      for (const item of tracked) consider(item);
+      pump();
     },
   };
 }

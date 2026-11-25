@@ -34,14 +34,11 @@ export const pageTranslationOptionsSchema = z
     aheadViewports: z.number().min(0).max(5).catch(1),
     /** How much text goes into one request, in characters. */
     batchChars: z.number().int().min(1).max(MAX_BATCH_CHARS).catch(1500),
-    /** Whether the text of a link stays as it is. */
-    keepLinkText: z.boolean().catch(false),
   })
   .catch({
     requestsPerSecond: 3,
     aheadViewports: 1,
     batchChars: 1500,
-    keepLinkText: false,
   });
 
 export type PageTranslationOptions = z.infer<
@@ -80,12 +77,24 @@ export function parsePageRequest(value: unknown): PageRequest | undefined {
 }
 
 /**
+ * What a content script is told when its port opens. It cannot read the
+ * settings itself, so this carries the ones it needs.
+ */
+export interface PageConfig {
+  options: PageTranslationOptions;
+  /** BCP 47 tag of the language the page is translated into. */
+  targetLanguage: string;
+  /** The name of the provider that translates, such as "Anthropic". */
+  provider: string;
+}
+
+/**
  * Background to content script. The background is part of the extension and
  * trusted, so these are typed but not checked at run time.
  */
 export type PageEvent =
   /** Sent once, right after the port opens. */
-  | { type: "config"; options: PageTranslationOptions }
+  | ({ type: "config" } & PageConfig)
   /** One request may be sent now. */
   | { type: "permit" }
   /** The translation of one segment, sent as soon as the model finished it. */

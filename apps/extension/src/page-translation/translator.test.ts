@@ -1,3 +1,4 @@
+import type { LLMErrorKind } from "@lingo/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type PageEvent,
@@ -7,6 +8,7 @@ import {
 import {
   createPageTranslator,
   type PageTranslationProgress,
+  type PageTranslationStatus,
   type PageTranslator,
   type TranslatorPort,
 } from "./translator.ts";
@@ -92,7 +94,14 @@ function fakeBackground() {
       emit({
         type: "config",
         options: pageTranslationOptionsSchema.parse(options),
+        targetLanguage: "ko",
+        provider: "Anthropic",
       }),
+    /** Fails a request the way the provider did. */
+    fail(request: TranslateRequest | undefined, kind: LLMErrorKind) {
+      if (!request) throw new Error("There is no request to fail");
+      emit({ type: "error", batch: request.batch, kind, message: kind });
+    },
     /** Grants a permit, and returns the request that it let through. */
     permit(): TranslateRequest | undefined {
       const before = translations().length;
@@ -118,6 +127,9 @@ function fakeBackground() {
 let background: ReturnType<typeof fakeBackground>;
 let translator: PageTranslator;
 let progress: PageTranslationProgress | undefined;
+let status: PageTranslationStatus | undefined;
+/** The text of what is waiting for its translation, as the page was told. */
+let pending: Set<string>;
 
 /** Lets observers and queued reports run. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -126,10 +138,19 @@ function page(html: string) {
   document.body.innerHTML = html;
   background = fakeBackground();
   progress = undefined;
+  status = undefined;
+  pending = new Set();
   translator = createPageTranslator({
     connect: background.connect,
     onProgress: (latest) => {
       progress = latest;
+    },
+    onStatus: (latest) => {
+      status = latest;
+    },
+    onPending: (unit, waiting) => {
+      if (waiting) pending.add(unit.source);
+      else pending.delete(unit.source);
     },
   });
 }
@@ -251,22 +272,32 @@ describe("createPageTranslator", () => {
     );
   });
 
-  it("leaves a paragraph as it was when the second answer does not fit either", async () => {
-    const source = '<p>Read <a href="/x">this</a> now</p>';
-    startWith(source);
+  it("shows a second answer that does not fit either, without what it lost", async () => {
+    startWith('<p>Read <a href="/x">this</a> now</p>');
     show("p");
 
     background.answer(background.permit(), ["지금 이것을 읽어라"]);
     background.answer(background.permit(), ["지금 이것을 읽어라"]);
     await settle();
 
-    expect(document.body.innerHTML).toBe(source);
+    // Translated, at the cost of the link's words.
+    expect(document.body.innerHTML).toBe(
+      '<p>지금 이것을 읽어라<a href="/x"></a></p>',
+    );
     expect(background.permits()).toBe(2);
-    expect(progress).toMatchObject({
-      translated: 0,
-      failed: 1,
-      failures: { missing: 1 },
-    });
+    expect(progress).toMatchObject({ translated: 1, lossy: 1, failed: 0 });
+
+    // The same text elsewhere gets the same translation, without a request.
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<p id="b">Read <a href="/y">this</a> now</p>',
+    );
+    await settle();
+    show("#b");
+    expect(document.querySelector("#b")?.textContent).toBe(
+      "지금 이것을 읽어라",
+    );
+    expect(background.permits()).toBe(2);
   });
 
   it("asks again for a segment that the answer left out", () => {
@@ -367,14 +398,11 @@ describe("createPageTranslator", () => {
     vi.useFakeTimers();
     startWith("<p>Hello</p>");
     show("p");
-    const request = background.permit();
-    background.emit({
-      type: "error",
-      batch: request?.batch ?? 0,
-      kind: "rate_limit",
-      message: "Slow down.",
-    });
+    background.fail(background.permit(), "rate_limit");
     expect(background.permits()).toBe(1);
+    // Still on its way, as far as the page can tell.
+    expect(pending).toEqual(new Set(["Hello"]));
+    expect(status?.problem).toBeUndefined();
 
     await vi.advanceTimersByTimeAsync(5000);
 
@@ -383,30 +411,115 @@ describe("createPageTranslator", () => {
     expect(document.body.innerHTML).toBe("<p>안녕</p>");
   });
 
-  it("stops asking when there is no usable API key", async () => {
-    startWith('<p id="a">Hello</p><p id="b">Bye</p>', { batchChars: 1 });
-    show("#a");
-    const request = background.permit();
-    background.emit({
-      type: "error",
-      batch: request?.batch ?? 0,
-      kind: "missing_key",
-      message: "No API key is set.",
-    });
+  it("stops and says so when the provider fails twice, until told to go on", async () => {
+    vi.useFakeTimers();
+    startWith("<p>Hello</p>");
+    show("p");
+    background.fail(background.permit(), "network");
+    await vi.advanceTimersByTimeAsync(5000);
+    background.fail(background.permit(), "network");
 
-    show("#b");
-    await settle();
+    expect(status).toMatchObject({ active: true, problem: "network" });
+    expect(pending).toEqual(new Set());
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(background.permits()).toBe(2);
 
-    expect(background.permits()).toBe(1);
-    expect(progress).toMatchObject({ failed: 1, failures: { missing_key: 1 } });
+    translator.retry();
+
+    expect(status?.problem).toBeUndefined();
+    expect(pending).toEqual(new Set(["Hello"]));
+    background.answer(background.permit(), ["안녕"]);
+    expect(document.body.innerHTML).toBe("<p>안녕</p>");
   });
 
-  it("does nothing when the extension is gone", () => {
+  it("stops at once when there is no usable API key", async () => {
+    startWith('<p id="a">Hello</p><p id="b">Bye</p>', { batchChars: 1 });
+    show("#a, #b");
+    expect(pending).toEqual(new Set(["Hello", "Bye"]));
+
+    background.fail(background.permit(), "missing_key");
+
+    // Nothing is left looking as if it were on its way.
+    expect(status).toMatchObject({ active: true, problem: "missing_key" });
+    expect(pending).toEqual(new Set());
+    await settle();
+    expect(progress).toMatchObject({ pending: 0, failed: 0 });
+
+    // With a key in place, it goes on with both paragraphs.
+    translator.retry();
+    expect(pending).toEqual(new Set(["Hello", "Bye"]));
+    background.answer(background.permit(), ["안녕"]);
+    expect(document.querySelector("#a")?.textContent).toBe("안녕");
+  });
+
+  it("goes on with the rest of the page when the model declines a paragraph", () => {
+    startWith('<p id="a">Hello</p><p id="b">Bye</p>', { batchChars: 1 });
+    show("#a, #b");
+
+    background.fail(background.permit(), "refusal");
+
+    expect(status?.problem).toBeUndefined();
+    background.answer(background.permit(), ["잘 가"]);
+    expect(document.body.innerHTML).toBe(
+      '<p id="a">Hello</p><p id="b">잘 가</p>',
+    );
+  });
+
+  it("gives up when the background keeps going away", () => {
+    startWith("<p>Hello</p>");
+    show("p");
+    for (let closing = 0; closing < 4; closing++) {
+      background.permit();
+      background.close();
+    }
+    expect(status).toMatchObject({ active: true, problem: "interrupted" });
+    expect(pending).toEqual(new Set());
+  });
+
+  it("says what it was told when it starts, and that it stopped", () => {
+    page("<p>Hello</p>");
+    translator.start();
+    expect(status).toEqual({ active: true });
+
+    background.configure();
+    expect(status).toMatchObject({
+      active: true,
+      config: { targetLanguage: "ko", provider: "Anthropic" },
+    });
+
+    translator.stop();
+    expect(status).toEqual({ active: false });
+  });
+
+  it("tells the page which text is waiting for its translation", () => {
+    startWith('<p id="a">Hello</p><p id="b">Bye</p><p id="c">Far</p>', {
+      batchChars: 1,
+    });
+    show("#a, #b");
+    expect(pending).toEqual(new Set(["Hello", "Bye"]));
+
+    // One is sent and one still waits its turn: both count as on their way.
+    const request = background.permit();
+    expect(pending).toEqual(new Set(["Hello", "Bye"]));
+
+    background.answer(request, ["안녕"]);
+    expect(pending).toEqual(new Set(["Bye"]));
+
+    hide("#b");
+    expect(pending).toEqual(new Set());
+
+    show("#b");
+    translator.stop();
+    expect(pending).toEqual(new Set());
+  });
+
+  it("says so when the extension is gone", () => {
     page("<p>Hello</p>");
     background.refuseConnections();
     translator.start();
     expect(background.connections).toBe(0);
     expect(document.body.innerHTML).toBe("<p>Hello</p>");
+    expect(status).toMatchObject({ active: true, problem: "updated" });
   });
 
   it("puts the page back when it stops, and remembers the translations", async () => {

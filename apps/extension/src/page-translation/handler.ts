@@ -8,6 +8,7 @@ import {
   type Settings,
 } from "@lingo/core";
 import type { CreateProviderOptions } from "@lingo/providers";
+import { PROVIDERS } from "@lingo/providers/catalog";
 import {
   type PageEvent,
   type PageRequest,
@@ -133,5 +134,13 @@ export function handlePageTranslationPort(
     }
   });
 
-  void deps.loadOptions().then((options) => post({ type: "config", options }));
+  void Promise.all([deps.loadOptions(), deps.loadSettings()]).then(
+    ([options, settings]) =>
+      post({
+        type: "config",
+        options,
+        targetLanguage: settings.targetLanguage,
+        provider: PROVIDERS[settings.provider].label,
+      }),
+  );
 }

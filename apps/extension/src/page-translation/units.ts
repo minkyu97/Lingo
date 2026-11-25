@@ -46,11 +46,6 @@ export interface Unit {
   translated: boolean;
 }
 
-export interface ScanOptions {
-  /** Whether the text of a link stays as it is. */
-  keepLinkText: boolean;
-}
-
 /** Elements that hold no text to translate. In a run, they are voids. */
 const NOT_TEXT = new Set([
   "audio",
@@ -131,9 +126,8 @@ function layoutOf(element: Element): Layout {
 }
 
 /** Whether the page says, or the element's kind implies, that its text stays. */
-function isKept(element: Element, options: ScanOptions): boolean {
+function isKept(element: Element): boolean {
   if (CODE.has(element.localName)) return true;
-  if (options.keepLinkText && element.localName === "a") return true;
   if (element.getAttribute("translate") === "no") return true;
   if (element.classList.contains("notranslate")) return true;
   if (CODE_CLASS.test(element.getAttribute("class") ?? "")) return true;
@@ -142,21 +136,21 @@ function isKept(element: Element, options: ScanOptions): boolean {
 }
 
 /** Whether nothing inside the element is translated. */
-export function isSkipped(element: Element, options: ScanOptions): boolean {
-  return NOT_TEXT.has(element.localName) || isKept(element, options);
+export function isSkipped(element: Element): boolean {
+  return NOT_TEXT.has(element.localName) || isKept(element);
 }
 
 /** Whether an element can be part of a run: inline, with nothing block-level inside. */
-export function flowsInline(element: Element, options: ScanOptions): boolean {
+export function flowsInline(element: Element): boolean {
   const layout = layoutOf(element);
   if (layout === "none") return true;
   if (layout === "block") return false;
-  if (isSkipped(element, options)) return true;
+  if (isSkipped(element)) return true;
   // A shadow tree is laid out in place of the children. Treat its host as a
   // block, so that the tree is scanned on its own.
   if (element.shadowRoot) return false;
   for (const child of element.children) {
-    if (!flowsInline(child, options)) return false;
+    if (!flowsInline(child)) return false;
   }
   return true;
 }
@@ -183,11 +177,7 @@ const hasWords = (pieces: Piece[]): boolean =>
       (piece.type === "text" && HAS_LETTER.test(piece.text)),
   );
 
-function piecesOf(
-  nodes: Iterable<ChildNode>,
-  options: ScanOptions,
-  preserve: boolean,
-): Piece[] {
+function piecesOf(nodes: Iterable<ChildNode>, preserve: boolean): Piece[] {
   const pieces: Piece[] = [];
   const readable = (text: string) =>
     preserve ? text : text.replace(COLLAPSIBLE, " ");
@@ -208,12 +198,12 @@ function piecesOf(
       pieces.push({ type: "void", element: node });
       continue;
     }
-    if (isKept(node, options)) {
+    if (isKept(node)) {
       pieces.push({ type: "keep", element: node, text });
       continue;
     }
 
-    const children = piecesOf(node.childNodes, options, preserve);
+    const children = piecesOf(node.childNodes, preserve);
     if (!hasWords(children)) {
       // Numbers, symbols, or kept text only. Nothing in it to translate.
       pieces.push({ type: "keep", element: node, text });
@@ -295,10 +285,9 @@ function buildUnit(
   host: Element,
   parent: ParentNode & Node,
   nodes: ChildNode[],
-  options: ScanOptions,
 ): Unit | undefined {
   const preserve = preservesWhitespace(parent);
-  let pieces = piecesOf(nodes, options, preserve);
+  let pieces = piecesOf(nodes, preserve);
   let root = containerOf(parent, nodes);
 
   // A run that is one element, as in <li><a>Home</a></li>, needs no tag: the
@@ -348,24 +337,24 @@ export interface HostScan {
  * Splits the direct content of `host` into units. Each run of text and
  * inline elements between two block-level children is one unit.
  */
-export function scanHost(host: Element, options: ScanOptions): HostScan {
+export function scanHost(host: Element): HostScan {
   const scan: HostScan = { units: [], children: [], shadowRoots: [] };
-  if (isSkipped(host, options)) return scan;
+  if (isSkipped(host)) return scan;
 
   const scanChildren = (parent: ParentNode & Node) => {
     let run: ChildNode[] = [];
     const flush = () => {
       const unit = run.some((node) => isElement(node) || isText(node))
-        ? buildUnit(host, parent, run, options)
+        ? buildUnit(host, parent, run)
         : undefined;
       if (unit) scan.units.push(unit);
       run = [];
     };
 
     for (const node of parent.childNodes) {
-      if (isElement(node) && !flowsInline(node, options)) {
+      if (isElement(node) && !flowsInline(node)) {
         flush();
-        if (!isSkipped(node, options)) scan.children.push(node);
+        if (!isSkipped(node)) scan.children.push(node);
       } else {
         run.push(node);
       }
