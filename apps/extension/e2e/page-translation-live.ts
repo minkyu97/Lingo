@@ -429,10 +429,13 @@ async function run() {
       const before = await facts(page);
       const shot = (name: string) =>
         page.screenshot({ path: `${flags.out}/${index + 1}-${name}.png` });
-      await shot("0-original");
+      await shot("0-before");
 
       const started = Date.now();
       await toggle(page, worker);
+      // Early enough to catch text that is still waiting for its translation.
+      await sleep(500);
+      await shot("0-waiting");
       await settle(page);
       const firstScreenMs = Date.now() - started - 1500;
       await shot("1-translated");
