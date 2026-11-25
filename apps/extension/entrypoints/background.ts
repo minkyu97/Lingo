@@ -16,6 +16,7 @@ import {
   PAGE_TRANSLATION_PORT,
 } from "../src/page-translation/protocol.ts";
 import { createRateLimiter } from "../src/page-translation/rate-limiter.ts";
+import { createPageSwitch } from "../src/page-translation/switch.ts";
 import { createSettingsDrawer } from "../src/settings-drawer.ts";
 import {
   loadApiKey,
@@ -82,6 +83,14 @@ export default defineBackground(() => {
     openOptionsPage: () => browser.runtime.openOptionsPage(),
   });
 
+  const pageSwitch = createPageSwitch({
+    sendToTopFrame: (tabId, message) =>
+      browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+    sendToAllFrames: (tabId, message) =>
+      browser.tabs.sendMessage(tabId, message),
+    tellOwnPages: (message) => browser.runtime.sendMessage(message),
+  });
+
   // The toolbar button opens the settings inside the current page. There is
   // no popup, which is what makes this event fire.
   browser.action.onClicked.addListener((tab) => {
@@ -102,6 +111,12 @@ export default defineBackground(() => {
       case "settings-drawer-grant":
         sendResponse(fromOwnPage && drawer.claimGrant(sender.tab?.id));
         return;
+      case "page-translation":
+        void pageSwitch
+          .request(sender.tab?.id, message.action)
+          .then(sendResponse);
+        // Keeps the channel open until the top frame has answered.
+        return true;
       case "check-api-key":
         // Only the extension's own pages have a key to check.
         if (!fromOwnPage) return;
@@ -118,12 +133,12 @@ export default defineBackground(() => {
   // ask the tab's content scripts to look it up.
   browser.commands.onCommand.addListener((command, tab) => {
     if (tab?.id === undefined) return;
-    let message: RuntimeMessage;
-    if (command === LOOKUP_COMMAND) message = { type: "lookup-selection" };
-    else if (command === PAGE_TRANSLATION_COMMAND) {
-      // Goes to every frame of the tab. Each one translates its own text.
-      message = { type: "toggle-page-translation" };
-    } else return;
+    if (command === PAGE_TRANSLATION_COMMAND) {
+      void pageSwitch.request(tab.id, "toggle");
+      return;
+    }
+    if (command !== LOOKUP_COMMAND) return;
+    const message: RuntimeMessage = { type: "lookup-selection" };
     browser.tabs.sendMessage(tab.id, message).catch(() => {
       // No content script runs on this page, such as a browser settings page.
     });

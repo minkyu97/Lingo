@@ -126,6 +126,25 @@
   color: var(--lingo-muted);
 }
 
+/* Action row: a row that ends in a button. */
+
+.lingo-action-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lingo-space-12);
+  height: 48px;
+  padding: 0 var(--lingo-space-12) 0 var(--lingo-space-16);
+  font: var(--lingo-text-body);
+}
+
+.lingo-action-row__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Option row: a radio button drawn as a row with a check mark. */
 
 .lingo-option-row {

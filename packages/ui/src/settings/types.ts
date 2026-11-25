@@ -46,6 +46,18 @@ export interface SettingsPanelProps {
   onOpenShortcuts: () => void;
   /** Leave out where the panel cannot be closed, such as a page of its own. */
   onClose?: () => void;
+  /**
+   * The page that the panel is shown in. Leave it out where the panel stands
+   * on its own, with no page behind it to translate.
+   */
+  page?: PageSwitch;
+}
+
+/** Whether the page in front is being translated, and how to change that. */
+export interface PageSwitch {
+  translating: boolean;
+  /** Translates the page, or shows its original again. */
+  onToggle: () => void;
 }
 
 /** The props of a screen that is reached from the main one. */

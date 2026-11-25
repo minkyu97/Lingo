@@ -54,6 +54,32 @@ const open = (row: string) =>
   fireEvent.click(screen.getByRole("button", { name: new RegExp(row) }));
 const title = () => screen.getByRole("heading", { level: 1 }).textContent;
 
+describe("the row for the page in front", () => {
+  it("is not there when the panel stands on its own", () => {
+    renderPanel();
+    expect(screen.queryByText("Translate this page")).toBeNull();
+  });
+
+  it("offers to translate the page", () => {
+    const onToggle = vi.fn();
+    renderPanel({ page: { translating: false, onToggle } });
+
+    expect(screen.getByText("Translate this page")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Translate" }));
+    expect(onToggle).toHaveBeenCalledOnce();
+  });
+
+  it("offers the original while the page is translated", () => {
+    const onToggle = vi.fn();
+    renderPanel({ page: { translating: true, onToggle } });
+
+    expect(screen.getByText("Translating into 한국어")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Translate" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show original" }));
+    expect(onToggle).toHaveBeenCalledOnce();
+  });
+});
+
 describe("the main screen", () => {
   it("shows each setting with its current value", () => {
     renderPanel();

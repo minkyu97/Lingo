@@ -74,7 +74,19 @@ describe("parseLookupRequest", () => {
 describe("isRuntimeMessage", () => {
   it("recognizes the known messages", () => {
     expect(isRuntimeMessage({ type: "lookup-selection" })).toBe(true);
-    expect(isRuntimeMessage({ type: "toggle-page-translation" })).toBe(true);
+    for (const action of ["toggle", "stop", "retry", "query"]) {
+      expect(isRuntimeMessage({ type: "page-translation", action })).toBe(true);
+    }
+    expect(isRuntimeMessage({ type: "page-translation-set", on: true })).toBe(
+      true,
+    );
+    expect(
+      isRuntimeMessage({
+        type: "page-translation-changed",
+        tabId: 4,
+        on: false,
+      }),
+    ).toBe(true);
     expect(isRuntimeMessage({ type: "settings-drawer-grant" })).toBe(true);
     for (const action of ["open", "close", "toggle"]) {
       expect(isRuntimeMessage({ type: "settings-drawer", action })).toBe(true);

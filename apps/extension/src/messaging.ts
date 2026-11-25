@@ -94,11 +94,30 @@ const runtimeMessageSchema = z.discriminatedUnion("type", [
   /** Background to content script, when the keyboard shortcut is pressed. */
   z.object({ type: z.literal("lookup-selection") }),
   /**
-   * Background to the content scripts of a tab, when the page translation
-   * shortcut is pressed: translate the page, or put it back if it is
-   * translated.
+   * Asks about the page translation of a tab, or for a change to it. The
+   * page bar, the settings, and frames inside a page send it to the
+   * background, which passes it on to the top frame of their tab. The
+   * background also sends it on its own when the shortcut is pressed. The
+   * top frame answers with a `PageSwitchAnswer`.
    */
-  z.object({ type: z.literal("toggle-page-translation") }),
+  z.object({
+    type: z.literal("page-translation"),
+    action: z.enum(["toggle", "stop", "retry", "query"]),
+  }),
+  /**
+   * Background to every frame of a tab, after its top frame turned page
+   * translation on or off: do the same.
+   */
+  z.object({ type: z.literal("page-translation-set"), on: z.boolean() }),
+  /**
+   * Background to the extension's own pages: the page translation of a tab
+   * was turned on or off.
+   */
+  z.object({
+    type: z.literal("page-translation-changed"),
+    tabId: z.number().int(),
+    on: z.boolean(),
+  }),
   /**
    * Settings page to background: ask the provider whether it accepts a key.
    * The answer is a `KeyCheckResult`.
@@ -140,6 +159,21 @@ export type KeyCheckResult = z.infer<typeof keyCheckResultSchema>;
 export const drawerAnswerSchema = z.enum(["opened", "closed", "unchanged"]);
 
 export type DrawerAnswer = z.infer<typeof drawerAnswerSchema>;
+
+/**
+ * Whether the page of a tab is being translated, and which tab that is. No
+ * answer, as from a page where Lingo does not run, reads as "it is not".
+ */
+export const pageSwitchAnswerSchema = z
+  .object({ on: z.boolean(), tabId: z.number().int().optional() })
+  .catch({ on: false });
+
+export type PageSwitchAnswer = z.infer<typeof pageSwitchAnswerSchema>;
+
+export type PageSwitchAction = Extract<
+  RuntimeMessage,
+  { type: "page-translation" }
+>["action"];
 
 export type DrawerAction = Extract<
   RuntimeMessage,

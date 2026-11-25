@@ -1,0 +1,40 @@
+/*
+ * What Lingo shows in a page while the page is translated. It needs the
+ * tokens and the controls, which `lookup.css` brings: import it after that.
+ */
+
+/* The page bar. The host positions it. */
+
+.lingo-page-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lingo-space-8);
+  height: 36px;
+  padding: 0 var(--lingo-space-4) 0 var(--lingo-space-12);
+  border: 1px solid var(--lingo-border);
+  border-radius: var(--lingo-radius-full);
+  background: var(--lingo-bg);
+  box-shadow: var(--lingo-shadow-raised);
+  white-space: nowrap;
+}
+
+.lingo-page-bar__label {
+  font: var(--lingo-text-small-strong);
+}
+
+.lingo-page-bar[data-state="problem"] .lingo-page-bar__label {
+  font: var(--lingo-text-small);
+}
+
+.lingo-page-bar__alert {
+  display: inline-flex;
+  flex: none;
+  color: var(--lingo-danger);
+}
+
+.lingo-page-bar__separator {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--lingo-border);
+}

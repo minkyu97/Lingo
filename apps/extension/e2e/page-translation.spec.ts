@@ -5,8 +5,10 @@
  */
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 import {
+  drawer,
   expect,
   openTestPage,
+  pressToolbarButton,
   recordedRequests,
   type TabsApi,
   test,
@@ -35,26 +37,40 @@ interface Progress {
 }
 
 /** Stores an API key and the page translation options, as settings would. */
-async function configure(worker: Worker, options: object = {}) {
-  await worker.evaluate(async (pageTranslation) => {
-    const { storage } = (globalThis as unknown as { chrome: ExtensionApi })
-      .chrome;
-    await storage.local.set({
-      apiKeys: { anthropic: "test-key" },
-      pageTranslation,
-    });
-  }, options);
+async function configure(
+  worker: Worker,
+  options: object = {},
+  apiKeys: object = { anthropic: "test-key" },
+) {
+  await worker.evaluate(
+    async ({ pageTranslation, apiKeys }) => {
+      const { storage } = (globalThis as unknown as { chrome: ExtensionApi })
+        .chrome;
+      await storage.local.set({ apiKeys, pageTranslation });
+    },
+    { pageTranslation: options, apiKeys },
+  );
 }
 
-/** Does what the keyboard shortcut does, in the tab in front. */
+/**
+ * Asks the top frame of the tab in front to turn page translation on or
+ * off, as the background does when the keyboard shortcut is pressed.
+ */
 async function toggleTranslation(worker: Worker) {
   await worker.evaluate(async () => {
     const { tabs } = (globalThis as unknown as { chrome: ExtensionApi }).chrome;
     const [tab] = await tabs.query({ active: true, lastFocusedWindow: true });
     if (tab?.id === undefined) throw new Error("No tab is in front");
-    await tabs.sendMessage(tab.id, { type: "toggle-page-translation" });
+    await tabs.sendMessage(tab.id, {
+      type: "page-translation",
+      action: "toggle",
+    });
   });
 }
+
+/** The bar at the bottom of a page that is being translated. */
+const pageBar = (page: Page) =>
+  page.getByRole("region", { name: "Lingo page translation" });
 
 async function openLongPage(
   context: BrowserContext,
@@ -360,4 +376,114 @@ test("puts the page back exactly as it was", async ({ context, worker }) => {
   await expectSettled(page);
   expect(await text(page, "#p1")).toBe("PARAGRAPH 1 OF THE LONG PAGE.");
   expect((await recordedRequests(page)).length).toBe(requests);
+});
+
+test("is turned on from the panel, and off from the page bar", async ({
+  context,
+  worker,
+  extensionId,
+}, testInfo) => {
+  await configure(worker);
+  const page = await openLongPage(context, worker);
+  await expect(pageBar(page)).toHaveCount(0);
+
+  // The first row of the panel is about the page in front.
+  await pressToolbarButton(page, extensionId);
+  const panel = drawer(page);
+  await expect(panel.getByText("Translate this page")).toBeVisible();
+  await panel.getByRole("button", { name: "Translate", exact: true }).click();
+
+  await expect(page.locator("h1")).toHaveText("LONG PAGE");
+  await expect(panel.getByText("Translating into English")).toBeVisible();
+  await expect(pageBar(page)).toContainText("Translating into English");
+  await page.screenshot({ path: testInfo.outputPath("translated.png") });
+
+  // The bar sits at the bottom center of the viewport.
+  const box = await pageBar(page).boundingBox();
+  const viewport = page.viewportSize();
+  if (!box || !viewport) throw new Error("The page bar has no place");
+  expect(box.x + box.width / 2).toBeCloseTo(viewport.width / 2, 0);
+  expect(viewport.height - (box.y + box.height)).toBeCloseTo(20, 0);
+
+  await pageBar(page).getByRole("button", { name: "Show original" }).click();
+
+  await expect(page.locator("h1")).toHaveText("Long page");
+  await expect(pageBar(page)).toHaveCount(0);
+  // The panel heard of it too.
+  await expect(panel.getByText("Translate this page")).toBeVisible();
+});
+
+test("says so in the page bar when there is no API key, and goes on once there is", async ({
+  context,
+  worker,
+}, testInfo) => {
+  await configure(worker, {}, {});
+  const page = await openLongPage(context, worker);
+
+  await toggleTranslation(worker);
+
+  await expect(pageBar(page)).toContainText(
+    "Add an API key to translate pages",
+  );
+  // Nothing is left looking as if it were on its way.
+  await expect
+    .poll(async () => (await placeholders(page, "#p1")).stretches)
+    .toBe(0);
+  expect(await text(page, "h1")).toBe("Long page");
+  await pageBar(page).screenshot({ path: testInfo.outputPath("no-key.png") });
+
+  // The way out is one press away, and translation goes on by itself.
+  await pageBar(page).getByRole("button", { name: "Open settings" }).click();
+  const panel = drawer(page);
+  await panel.getByRole("button", { name: /^Translation engine/ }).click();
+  await panel.getByLabel("API key").fill("test-key");
+  await panel.getByLabel("API key").press("Enter");
+  await expect(panel.getByText(/^Saved\./)).toBeVisible();
+
+  await expect(page.locator("h1")).toHaveText("LONG PAGE");
+  await expect(pageBar(page)).toContainText("Translating into English");
+});
+
+test("stops when the close button of a problem is pressed", async ({
+  context,
+  worker,
+}) => {
+  await configure(worker, {}, {});
+  const page = await openLongPage(context, worker);
+  await toggleTranslation(worker);
+  await expect(pageBar(page)).toContainText("Add an API key");
+
+  await pageBar(page).getByRole("button", { name: "Stop translating" }).click();
+
+  await expect(pageBar(page)).toHaveCount(0);
+});
+
+test("translates the frames inside a page along with it", async ({
+  context,
+  worker,
+  extensionId,
+}) => {
+  await configure(worker);
+  const page = await openTestPage(context, "/framed-page");
+  await waitUntilListening(page, worker);
+  const inner = page.frameLocator('iframe[title="Inner page"]');
+  await expect(inner.locator("h1")).toHaveText("Test page");
+
+  await pressToolbarButton(page, extensionId);
+  await drawer(page)
+    .getByRole("button", { name: "Translate", exact: true })
+    .click();
+
+  await expect(page.locator("h1")).toHaveText("OUTER PAGE");
+  await expect(inner.locator("h1")).toHaveText("TEST PAGE");
+  // One bar for the page, however many frames it has.
+  await expect(pageBar(page)).toHaveCount(1);
+  await expect(
+    inner.getByRole("region", { name: "Lingo page translation" }),
+  ).toHaveCount(0);
+
+  await pageBar(page).getByRole("button", { name: "Show original" }).click();
+
+  await expect(page.locator("h1")).toHaveText("Outer page");
+  await expect(inner.locator("h1")).toHaveText("Test page");
 });

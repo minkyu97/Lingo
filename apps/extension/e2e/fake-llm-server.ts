@@ -15,6 +15,7 @@
  *   `GET /long-page` is a page many screens long, for page translation.
  *   `GET /slow-page` is the same page under another title. Translations of
  *   it take a second and a half, long enough to see text waiting for one.
+ *   `GET /framed-page` is a page that holds `/page` in a frame.
  * - `GET /requests` returns every request body received so far and when it
  *   came in, so a test can check what the extension sent. `DELETE /requests`
  *   clears the list.
@@ -101,6 +102,18 @@ ${Array.from(
         window.clicks += 1;
       });
     </script>
+  </body>
+</html>`;
+
+const FRAMED_PAGE = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>A page with a frame</title>
+  </head>
+  <body>
+    <h1>Outer page</h1>
+    <iframe src="/page" title="Inner page" width="600" height="300"></iframe>
   </body>
 </html>`;
 
@@ -300,6 +313,13 @@ const server = createServer(async (request, response) => {
     response
       .writeHead(200, { "content-type": "text/html; charset=utf-8" })
       .end(LONG_PAGE);
+    return;
+  }
+
+  if (request.method === "GET" && path === "/framed-page") {
+    response
+      .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end(FRAMED_PAGE);
     return;
   }
 

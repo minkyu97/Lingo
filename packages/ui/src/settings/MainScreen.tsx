@@ -1,5 +1,13 @@
 import { nativeLanguageName } from "@lingo/core";
-import { CodeXml, Keyboard, Languages, ScanText, Sparkles } from "lucide-react";
+import {
+  CodeXml,
+  FileText,
+  Keyboard,
+  Languages,
+  ScanText,
+  Sparkles,
+} from "lucide-react";
+import { ActionRow } from "./ActionRow.tsx";
 import { PanelHeader } from "./PanelHeader.tsx";
 import { SettingsRow } from "./SettingsRow.tsx";
 import type { SettingsPanelProps } from "./types.ts";
@@ -15,6 +23,7 @@ export function MainScreen({
   shortcut,
   version,
   sourceUrl,
+  page,
   onOpenShortcuts,
   onClose,
   onOpen,
@@ -33,6 +42,22 @@ export function MainScreen({
     <>
       <PanelHeader title="Settings" onClose={onClose} />
       <div className="lingo-settings__content">
+        {page && (
+          <>
+            <ActionRow
+              icon={FileText}
+              label={
+                page.translating
+                  ? `Translating into ${nativeLanguageName(settings.targetLanguage)}`
+                  : "Translate this page"
+              }
+              action={page.translating ? "Show original" : "Translate"}
+              emphasis={page.translating ? "secondary" : "primary"}
+              onAction={page.onToggle}
+            />
+            <hr className="lingo-divider" />
+          </>
+        )}
         <SettingsRow
           icon={Sparkles}
           label="Translation engine"

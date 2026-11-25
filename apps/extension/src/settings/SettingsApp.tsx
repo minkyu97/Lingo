@@ -1,10 +1,17 @@
 import type { ProviderId, Settings } from "@lingo/core";
 import { PROVIDERS } from "@lingo/providers/catalog";
-import { type KeyStatus, SettingsPanel } from "@lingo/ui";
+import { type KeyStatus, type PageSwitch, SettingsPanel } from "@lingo/ui";
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import { requestKeyCheck } from "../key-check.ts";
-import { LOOKUP_COMMAND } from "../messaging.ts";
+import {
+  isRuntimeMessage,
+  LOOKUP_COMMAND,
+  type PageSwitchAction,
+  type PageSwitchAnswer,
+  pageSwitchAnswerSchema,
+  type RuntimeMessage,
+} from "../messaging.ts";
 import {
   type ApiKeys,
   loadApiKeys,
@@ -24,6 +31,47 @@ const SAVED_NOTICE_MS = 4000;
 export interface SettingsAppProps {
   /** Given where the settings can be closed, such as the in-page panel. */
   onClose?: () => void;
+  /** Whether the settings are shown inside a page, which they can translate. */
+  inPage?: boolean;
+}
+
+function askPageSwitch(action: PageSwitchAction): Promise<PageSwitchAnswer> {
+  const message: RuntimeMessage = { type: "page-translation", action };
+  return browser.runtime
+    .sendMessage(message)
+    .catch(() => undefined)
+    .then((answer) => pageSwitchAnswerSchema.parse(answer));
+}
+
+/**
+ * Whether the page around the settings is being translated, and a way to
+ * change that. It follows changes made elsewhere, such as by the shortcut.
+ */
+function usePageSwitch(inPage: boolean): PageSwitch | undefined {
+  const [translating, setTranslating] = useState(false);
+  const tabId = useRef<number>(undefined);
+
+  useEffect(() => {
+    if (!inPage) return;
+    void askPageSwitch("query").then((answer) => {
+      tabId.current = answer.tabId;
+      setTranslating(answer.on);
+    });
+    const onMessage = (message: unknown) => {
+      if (!isRuntimeMessage(message)) return;
+      if (message.type !== "page-translation-changed") return;
+      if (message.tabId === tabId.current) setTranslating(message.on);
+    };
+    browser.runtime.onMessage.addListener(onMessage);
+    return () => browser.runtime.onMessage.removeListener(onMessage);
+  }, [inPage]);
+
+  if (!inPage) return undefined;
+  return {
+    translating,
+    onToggle: () =>
+      void askPageSwitch("toggle").then(({ on }) => setTranslating(on)),
+  };
 }
 
 /**
@@ -32,7 +80,8 @@ export interface SettingsAppProps {
  * after its provider has accepted it. It runs only in the extension's own
  * pages, never in a content script, because it reads the API keys.
  */
-export function SettingsApp({ onClose }: SettingsAppProps) {
+export function SettingsApp({ onClose, inPage = false }: SettingsAppProps) {
+  const page = usePageSwitch(inPage);
   const [settings, setSettings] = useState<Settings>();
   const [apiKeys, setApiKeys] = useState<ApiKeys>({});
   const [shortcut, setShortcut] = useState("");
@@ -97,7 +146,11 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
     }
     report("checking");
     const result = await requestKeyCheck(provider, key);
-    if (result === "accepted") await storeApiKey(provider, key);
+    if (result === "accepted") {
+      await storeApiKey(provider, key);
+      // A page translation that stopped for want of a key can go on now.
+      if (inPage) void askPageSwitch("retry");
+    }
     report(result === "accepted" ? "saved" : result);
   }
 
@@ -114,6 +167,7 @@ export function SettingsApp({ onClose }: SettingsAppProps) {
       onApiKeySubmit={(provider, key) => void submitApiKey(provider, key)}
       onOpenShortcuts={() => void browser.tabs.create({ url: SHORTCUTS_URL })}
       onClose={onClose}
+      page={page}
     />
   );
 }
