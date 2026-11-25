@@ -71,6 +71,7 @@ Run `mise install` once to get the pinned Node and pnpm, then `pnpm install`. If
 | `pnpm e2e`                           | Builds the extension in end-to-end mode and drives it in Chromium against a fake LLM server. Run `pnpm --filter @lingo/extension exec playwright install chromium` once first |
 | `pnpm --filter @lingo/extension dev` | Rebuilds the extension on change into `.output/chrome-mv3-dev`. Load that folder in `chrome://extensions` with developer mode on                                              |
 | `pnpm smoke`                         | Calls the real provider APIs through the adapters. Needs API keys in `.env.local`, costs a few cents, and is not part of CI                                                   |
+| `pnpm live:page-translation`         | Translates real pages with a real model in the built extension, and reports how the model did. Needs API keys in `.env.local`, costs money, and is not part of CI             |
 
 ## Code style
 
@@ -163,7 +164,7 @@ CI runs on GitHub Actions.
 - When you add tests, whether a new suite or a new package or app that has tests, wire them into the CI workflow **in the same change**. A test that does not run in CI is not finished.
 - A pull request is ready to merge only when CI passes. Do not skip, disable, or weaken a failing test to make it pass.
 - Path filters may limit a job to the surfaces a change can affect. Tests are never skipped for any other reason.
-- The one check outside CI is `pnpm smoke`. It sends real requests with your own API keys and costs money, so run it by hand after changing a provider adapter.
+- Two checks are outside CI, because they send real requests with your own API keys and cost money. Run `pnpm smoke` by hand after changing a provider adapter, and `pnpm live:page-translation` after changing the page translation prompt or the way a page is split and rewritten.
 - The workflow is `.github/workflows/ci.yml`. It installs the toolchain from `mise.toml`, so local and CI versions match.
 
 ## Agent tooling

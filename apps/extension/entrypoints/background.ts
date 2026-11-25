@@ -10,9 +10,16 @@ import {
   LOOKUP_PORT,
   type RuntimeMessage,
 } from "../src/messaging.ts";
+import { handlePageTranslationPort } from "../src/page-translation/handler.ts";
+import {
+  PAGE_TRANSLATION_COMMAND,
+  PAGE_TRANSLATION_PORT,
+} from "../src/page-translation/protocol.ts";
+import { createRateLimiter } from "../src/page-translation/rate-limiter.ts";
 import { createSettingsDrawer } from "../src/settings-drawer.ts";
 import {
   loadApiKey,
+  loadPageTranslationOptions,
   loadSettings,
   restrictStorageToTrustedContexts,
 } from "../src/stores.ts";
@@ -43,6 +50,20 @@ export default defineBackground(() => {
       loadSettings,
       loadApiKey,
       createProvider,
+      baseURL,
+    });
+  });
+
+  // One limiter for every tab and frame, since they share one API key.
+  const limiter = createRateLimiter();
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name !== PAGE_TRANSLATION_PORT) return;
+    handlePageTranslationPort(port, {
+      loadSettings,
+      loadOptions: loadPageTranslationOptions,
+      loadApiKey,
+      createProvider,
+      limiter,
       baseURL,
     });
   });
@@ -96,8 +117,13 @@ export default defineBackground(() => {
   // The shortcut is handled here, and the selection lives in the page, so
   // ask the tab's content scripts to look it up.
   browser.commands.onCommand.addListener((command, tab) => {
-    if (command !== LOOKUP_COMMAND || tab?.id === undefined) return;
-    const message: RuntimeMessage = { type: "lookup-selection" };
+    if (tab?.id === undefined) return;
+    let message: RuntimeMessage;
+    if (command === LOOKUP_COMMAND) message = { type: "lookup-selection" };
+    else if (command === PAGE_TRANSLATION_COMMAND) {
+      // Goes to every frame of the tab. Each one translates its own text.
+      message = { type: "toggle-page-translation" };
+    } else return;
     browser.tabs.sendMessage(tab.id, message).catch(() => {
       // No content script runs on this page, such as a browser settings page.
     });

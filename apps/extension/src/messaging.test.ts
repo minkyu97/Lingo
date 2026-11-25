@@ -74,6 +74,7 @@ describe("parseLookupRequest", () => {
 describe("isRuntimeMessage", () => {
   it("recognizes the known messages", () => {
     expect(isRuntimeMessage({ type: "lookup-selection" })).toBe(true);
+    expect(isRuntimeMessage({ type: "toggle-page-translation" })).toBe(true);
     expect(isRuntimeMessage({ type: "settings-drawer-grant" })).toBe(true);
     for (const action of ["open", "close", "toggle"]) {
       expect(isRuntimeMessage({ type: "settings-drawer", action })).toBe(true);

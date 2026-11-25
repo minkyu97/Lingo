@@ -31,7 +31,7 @@ Background research:
 ```
 Lingo/
 ├─ packages/
-│  ├─ core/        @lingo/core: domain types, the LLM port, prompt builder, lookup use case
+│  ├─ core/        @lingo/core: domain types, the LLM port, prompt builder, lookup use case, page translation protocol
 │  ├─ providers/   @lingo/providers: Anthropic and OpenAI adapters, model catalog
 │  └─ ui/          @lingo/ui: design tokens and React components shared by the extension and the desktop app
 ├─ apps/
@@ -110,13 +110,15 @@ Adapters turn every provider failure into an `LLMError` with one of those kinds,
 
 Data that arrives without a trustworthy type goes through a Zod schema, and the TypeScript type is inferred from that schema where the schema defines the shape. This keeps a type and its check from drifting apart.
 
-| Data                           | Schema                            | On bad input                                                        |
-| ------------------------------ | --------------------------------- | ------------------------------------------------------------------- |
-| Messages from a content script | `apps/extension/src/messaging.ts` | The message is rejected. Optional fields that are wrong are dropped |
-| Answers to a message           | `apps/extension/src/messaging.ts` | An unexpected answer, or none, reads as "could not be done"         |
-| Stored settings                | `normalizeSettings` in `core`     | Each wrong field falls back to its default                          |
-| Stored API keys and model IDs  | `perProviderTextSchema` in `core` | Wrong entries are left out                                          |
-| A model's dictionary entry     | `packages/core/src/dictionary.ts` | Each missing or wrong field reads as empty                          |
+| Data                            | Schema                                            | On bad input                                                        |
+| ------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------- |
+| Messages from a content script  | `apps/extension/src/messaging.ts`                 | The message is rejected. Optional fields that are wrong are dropped |
+| Page translation requests       | `apps/extension/src/page-translation/protocol.ts` | The request is ignored. A request that is too large counts as wrong |
+| Stored page translation options | `apps/extension/src/page-translation/protocol.ts` | Each wrong value falls back to its default                          |
+| Answers to a message            | `apps/extension/src/messaging.ts`                 | An unexpected answer, or none, reads as "could not be done"         |
+| Stored settings                 | `normalizeSettings` in `core`                     | Each wrong field falls back to its default                          |
+| Stored API keys and model IDs   | `perProviderTextSchema` in `core`                 | Wrong entries are left out                                          |
+| A model's dictionary entry      | `packages/core/src/dictionary.ts`                 | Each missing or wrong field reads as empty                          |
 
 Schemas use the regular `zod` API, chosen for readability over size. It adds about 83 kB to the content script, which is injected into every frame of every page. The tree-shakable `zod/mini` would add about 23 kB, at the cost of a wordier, function-style notation.
 
@@ -124,16 +126,17 @@ Not everything typed `unknown` needs a schema:
 
 - `parsePartialJson` is a parser. Its result is what the dictionary schema checks.
 - The adapters classify a thrown error by the SDK's error classes, which is not a question of shape.
-- Events from the background to a content script over the lookup port are typed but not checked, because the sender is the extension itself.
+- Events from the background to a content script over a port are typed but not checked, because the sender is the extension itself.
+- A translated segment of a page is read by `parseMarkup`, and its tags are then checked one by one against the page's own elements. See [Page translation protocol](#page-translation-protocol).
 
 ### Use cases
 
-| Use case            | What it does                                                                                                                            | Status  |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Translate selection | Translates the selection, using context when present                                                                                    | Done    |
-| Define in context   | For a word or short phrase: a dictionary entry with the meaning in this sentence when context exists, and the general senses either way | Done    |
-| Refine              | Continues the conversation: the original request, the result, and the user's follow-up instructions                                     | Planned |
-| Translate page      | Translates a page in batches (extension only)                                                                                           | Planned |
+| Use case            | What it does                                                                                                                            | Status                                                                      |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Translate selection | Translates the selection, using context when present                                                                                    | Done                                                                        |
+| Define in context   | For a word or short phrase: a dictionary entry with the meaning in this sentence when context exists, and the general senses either way | Done                                                                        |
+| Refine              | Continues the conversation: the original request, the result, and the user's follow-up instructions                                     | Planned                                                                     |
+| Translate page      | Translates the text of a page near the viewport, in batches of paragraph-sized segments (extension only)                                | In progress: it runs from a keyboard shortcut, and its interface comes next |
 
 Translate and define share one use case, `prepareLookup`. They differ in the prompt and in the answer: a translation is plain text, and a definition is a dictionary entry as JSON. Chat-based refinement needs no separate mechanism: a lookup is the first turn of a conversation, and refining appends turns to it.
 
@@ -183,6 +186,25 @@ The user message is assembled by code:
 - The prompts tell the model that everything inside the tags is material to translate, never instructions to follow. Page text is untrusted.
 
 `spec/prompt-cases.json` pins these rules as golden cases. The TypeScript core runs all of them, and the Swift port must pass the same file.
+
+The prompt for page translation is in the same file, under `pageTranslation`. It has no golden cases, because page translation exists in the extension only.
+
+### Page translation protocol
+
+A page is translated in segments: one paragraph-sized piece of text each. `packages/core/src/page-translation.ts` defines how a segment travels to the model and back. It handles text only and knows nothing of the DOM.
+
+Formatting and links inside a segment become numbered inline tags, so that the model can move them to where they belong in the translated sentence:
+
+```
+<seg id="1">To <g1>start the server</g1>, run <k2>npm start</k2>.<x3/></seg>
+```
+
+- `<gN>…</gN>` is a group: text with its own formatting, or a link. Its text is translated.
+- `<kN>…</kN>` is kept text, such as code. The model sees it, so that the sentence around it comes out right, and copies it unchanged.
+- `<xN/>` stands for something that is not text, such as an image or a line break.
+- The characters `<`, `>` and `&` of the page's own text are escaped, so a tag can always be told from text.
+
+A request holds several segments in page order, and the page's title for reference. The answer holds the same segments, translated. `createSegmentReader` reads them out of the stream as each one is completed, and ignores anything outside a segment. `parseMarkup` turns the text of a segment into a tree of text and tags.
 
 ## Shared UI
 
@@ -264,9 +286,11 @@ Local servers may need origin configuration before they accept requests from an 
 
 ### Browser extension
 
-Implemented: translate or define the selection, through an in-page floating button or a keyboard shortcut, in a popup that can be moved and pinned; and settings that open in a panel inside the page.
+Implemented: translate or define the selection, through an in-page floating button or a keyboard shortcut, in a popup that can be moved and pinned; settings that open in a panel inside the page; and page translation, from a keyboard shortcut.
 
-Planned: chat refinement, full-page translation, Safari.
+In progress: the interface of page translation. It is designed and not built yet: a mark on paragraphs that are being translated, a control in the page and in the panel, and a setting for the request rate.
+
+Planned: chat refinement, Safari.
 
 How a lookup flows:
 
@@ -292,24 +316,40 @@ How the settings open:
 
 The settings have no Save button. Each change is stored as it is made, except an API key, which is stored once its provider has accepted it.
 
+How a page is translated:
+
+1. The keyboard shortcut (`Alt+Shift+P` by default) reaches the background, which messages every frame of the tab. Each frame translates its own text. The same shortcut turns translation off again.
+2. The frame's content script opens a port named `lingo:page-translation`. The background answers with the options, and the script splits the text of the page into units (`src/page-translation/units.ts`). Each run of text and inline elements between two block-level elements is one unit, roughly a paragraph. Code, form fields, and what the page marks as not to be translated (`translate="no"`, `notranslate`) are left out.
+3. An `IntersectionObserver` says which units are on screen or within one screen of it. Only those are queued. A unit that is scrolled past before its turn comes is taken off the queue again.
+4. Before each request the content script asks the background for a permit. The background grants permits at the configured rate, three per second by default, from one limiter for all tabs and frames, since they share one API key. With a permit, the script picks the units closest to the viewport, up to about 1,500 characters of text, and sends them as segments. Units with the same text share a segment.
+5. `src/page-translation/handler.ts` in the background loads the settings and the key, builds the request, and streams from the provider. Each translated segment goes back over the port as soon as the model has finished it, so paragraphs fill in one by one.
+6. `src/page-translation/rewrite.ts` writes the translation into the page. See "The page's own nodes" below.
+7. A `MutationObserver` follows the page. New content, such as more comments, is split into units and translated when it comes near. A unit that the page itself rewrites is put back and read again.
+8. Turning translation off puts every unit back: the same nodes, in the same order, with the same text. Translations are remembered for as long as the page lives, so turning it on again needs no request.
+
 Where things are in `apps/extension`:
 
-| Path                                          | Role                                                                                                                                   |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `entrypoints/background.ts`                   | Registers listeners: the lookup port, the shortcut, the toolbar button, key checks, and the settings drawer                            |
-| `entrypoints/content/`                        | Selection detection, the button, the popup, and the settings drawer, mounted in a shadow root                                          |
-| `entrypoints/options/`                        | The settings as a page of their own, in a tab                                                                                          |
-| `entrypoints/settings-drawer/`                | The settings as shown inside the in-page drawer                                                                                        |
-| `src/settings/`                               | `SettingsApp`: the shared settings panel connected to storage and to the background. Both settings pages render it                     |
-| `src/messaging.ts`                            | The message types shared by the content script, the pages, and the background, and their validation                                    |
-| `src/lookup-handler.ts`                       | The background side of a lookup, written against a small port interface so it is tested without a browser                              |
-| `src/lookup-client.ts`, `src/lookup-state.ts` | The content-script side: opening the port, and folding events into popup state                                                         |
-| `src/key-check.ts`                            | Checking an API key: the background side, which asks the provider, and the settings side, which asks the background                    |
-| `src/settings-drawer.ts`                      | The background side of the drawer: passing requests to the top frame, falling back to a tab, and the grant for the page in the drawer  |
-| `src/context/dom.ts`                          | DOM context capture                                                                                                                    |
-| `src/stores.ts`                               | Settings and key storage                                                                                                               |
-| `src/position.ts`, `src/drag.ts`              | Where the button and the popup go. The popup opens below the selection or above it, or where it was dragged, and stays in the viewport |
-| `e2e/`                                        | Playwright tests, the helpers they share, and the fake LLM server they run against                                                     |
+| Path                                          | Role                                                                                                                                                                |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entrypoints/background.ts`                   | Registers listeners: the lookup port, the shortcut, the toolbar button, key checks, and the settings drawer                                                         |
+| `entrypoints/content/`                        | Selection detection, the button, the popup, and the settings drawer, mounted in a shadow root                                                                       |
+| `entrypoints/options/`                        | The settings as a page of their own, in a tab                                                                                                                       |
+| `entrypoints/settings-drawer/`                | The settings as shown inside the in-page drawer                                                                                                                     |
+| `src/settings/`                               | `SettingsApp`: the shared settings panel connected to storage and to the background. Both settings pages render it                                                  |
+| `src/messaging.ts`                            | The message types shared by the content script, the pages, and the background, and their validation                                                                 |
+| `src/lookup-handler.ts`                       | The background side of a lookup, written against a small port interface so it is tested without a browser                                                           |
+| `src/lookup-client.ts`, `src/lookup-state.ts` | The content-script side: opening the port, and folding events into popup state                                                                                      |
+| `src/key-check.ts`                            | Checking an API key: the background side, which asks the provider, and the settings side, which asks the background                                                 |
+| `src/settings-drawer.ts`                      | The background side of the drawer: passing requests to the top frame, falling back to a tab, and the grant for the page in the drawer                               |
+| `src/context/dom.ts`                          | DOM context capture                                                                                                                                                 |
+| `src/page-translation/units.ts`               | Splitting a page into units, and writing each unit as text with inline tags                                                                                         |
+| `src/page-translation/rewrite.ts`             | Writing a translation into the page's own nodes, and putting the original back                                                                                      |
+| `src/page-translation/translator.ts`          | The content-script side of page translation: what is near the viewport, the queue, following the page as it changes, and turning off                                |
+| `src/page-translation/handler.ts`             | The background side: permits at the configured rate from `rate-limiter.ts`, and the stream of translated segments                                                   |
+| `src/page-translation/protocol.ts`            | The messages of the page translation port, the options, and their validation                                                                                        |
+| `src/stores.ts`                               | Settings and key storage                                                                                                                                            |
+| `src/position.ts`, `src/drag.ts`              | Where the button and the popup go. The popup opens below the selection or above it, or where it was dragged, and stays in the viewport                              |
+| `e2e/`                                        | Playwright tests, the helpers they share, and the fake LLM server they run against. Also the live check of page translation, which is not a test and is run by hand |
 
 Design points:
 
@@ -321,11 +361,31 @@ Design points:
 - **Explicit imports.** WXT's auto-imports are off. They would also rewrite the workspace packages that the app consumes as source.
 - **End-to-end build.** `wxt build --mode e2e` reads `.env.e2e`, which points the adapters at the fake server. The production build has no such override.
 
-Page translation, when it is built: translate what is near the viewport first rather than the whole page at once, batch paragraphs, cap concurrency, cache by text and target language, and show the user what a page is costing. Details are open.
+Design points of page translation:
+
+- **The page's own nodes.** A translation is written into the text nodes the page already has, and the page's inline elements are moved to follow the new word order. No node of the page is removed or given another parent. So every style, link, and event listener stays, and the page's own scripts find their nodes where they left them, which matters on a site built with a framework. Elements are moved with `moveBefore` where the browser has it, which does not reset them. The translator's own changes do not count as changes of the page: it throws away the mutation records of what it wrote.
+- **Tags that do not fit.** A model does not always return the tags it was given. A tag that the segment did not have, a tag used twice, or a tag inside the wrong tag is taken off, and its words stay. A translation that lacks a tag cannot be mended, because there is no telling where that element belongs. The unit is then sent once more, in a request of its own. If that fails too, the unit keeps its original text.
+- **Looking ahead.** The observer's margin is set as `scrollMargin`, in pixels. That widens the viewport and every scrolling box inside the page alike. A `rootMargin` on top of it would count twice for the page itself: an end-to-end test caught text five screens away being translated.
+- **Coming back after the worker stops.** The browser stops an idle service worker, which closes the port. The content script then opens a new port and sends again what was in progress. After three closings in a row it gives up.
+- **A page that never rests.** An element whose text the page rewrites again and again is read at most eight more times, and then left alone. Without that, a clock or a counter would be translated without end.
+- **Failures that will not pass.** A missing or rejected API key stops the queue. When the provider says to slow down, or cannot be reached, the queue waits five seconds and tries again.
+
+Not built yet: showing what a page costs, prompt caching for the instructions that every request repeats, a cap on requests in progress at once, and skipping text that is already in the target language.
+
+A live run on 2026-11-24, with real models on real pages (`pnpm live:page-translation`), from English into Korean:
+
+| Model             | Segments with tags that came back wrong | Paragraphs left untranslated | Screen and one screen ahead, translated |
+| ----------------- | --------------------------------------- | ---------------------------- | --------------------------------------- |
+| Claude Haiku 5.5  | 10 of 67                                | 2 of 132                     | 4.9 s                                   |
+| Claude Sonnet 5.5 | 2 of 48                                 | 1 of 117                     | 8.2 s                                   |
+| Claude Opus 5.5   | 0 of 48                                 | 0                            | 11.1 s                                  |
+| GPT-6.2 Sol       | 0 of 49                                 | 0                            | 13.5 s                                  |
+
+These are from a Wikipedia article, where a paragraph can hold twenty links. On an MDN page, a Hacker News thread, and react.dev, Claude Haiku 5.5 returned every tag. Links and code came through unchanged on all four, and so did the restored page. On react.dev, following a link that swaps the content without loading a page caused no error, and the new content was translated.
 
 Safari on iOS and iPadOS will be built from the same code with WXT's Safari target, then packaged with `xcrun safari-web-extension-packager` ([Apple](https://developer.apple.com/documentation/safariservices/packaging-a-web-extension-for-safari)) into the `apps/apple` project. Constraints that affect design:
 
-- The background script is non-persistent and Safari unloads it ([Apple](https://developer.apple.com/documentation/safariservices/optimizing-your-web-extension-for-safari)). Developers report it being killed after 30–45 seconds and long fetches failing ([thread](https://developer.apple.com/forums/thread/758346), [thread](https://developer.apple.com/forums/thread/764482)). Keep each request short and make page translation resumable.
+- The background script is non-persistent and Safari unloads it ([Apple](https://developer.apple.com/documentation/safariservices/optimizing-your-web-extension-for-safari)). Developers report it being killed after 30–45 seconds and long fetches failing ([thread](https://developer.apple.com/forums/thread/758346), [thread](https://developer.apple.com/forums/thread/764482)). Keep each request short. Page translation already sends again what was in progress when its port closes.
 - `contextMenus`, `webRequest`, `windows.create` and `side_panel` are unavailable, and `storage.sync` does not sync ([Apple](https://developer.apple.com/documentation/safariservices/assessing-your-safari-web-extension-s-browser-compatibility)).
 - The native text-selection menu cannot be hidden and can cover a page-drawn toolbar. Position Lingo's control away from it.
 - Users grant site access per site ([Apple](https://developer.apple.com/documentation/safariservices/managing-safari-web-extension-permissions)).
@@ -402,7 +462,8 @@ Deferred. `ACTION_PROCESS_TEXT` provides the selected text only, so the feature 
 
 1. **Foundation and extension MVP.** In progress.
    - Done: the workspace, `core`, `providers`, `ui`, CI, the extension's selection lookup (translate and define with context) in a popup that can be moved and pinned, and settings that open inside the page.
-   - Next: chat refinement, then page translation.
+   - In progress: page translation. It runs from a keyboard shortcut; its interface comes next.
+   - Next: chat refinement.
 2. **Desktop spike (one week).** On both macOS and Windows: hotkey → selection and paragraph → a panel that leaves focus in the source app. Outcome: stay on Tauri or switch to Electron.
 3. **Desktop MVP.**
 4. **iOS and iPadOS.** The SwiftUI app, the default-translation extension, and the Safari extension reusing the build from step 1.
@@ -410,17 +471,20 @@ Deferred. `ACTION_PROCESS_TEXT` provides the selected text only, so the feature 
 
 ## Open risks
 
-| Risk                                                                                                                                                            | Plan                                                                                                                                                                                    |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tauri cannot deliver a focus-preserving panel on Windows                                                                                                        | The desktop spike; Electron fallback                                                                                                                                                    |
-| The macOS panel depends on a single-maintainer plugin                                                                                                           | Same spike; the plugin is small enough to fork or replace                                                                                                                               |
-| Accessibility coverage is lower than estimated in key apps                                                                                                      | Measure during the spike; selection-only fallback always works                                                                                                                          |
-| Safari kills the background script mid-request                                                                                                                  | Short requests, resumable page translation                                                                                                                                              |
-| App Store rejects a bring-your-own-key app                                                                                                                      | Build the iOS app last; keep the extension and desktop independent of it                                                                                                                |
-| Default-translation extension limits are undocumented                                                                                                           | Prototype early in step 4                                                                                                                                                               |
-| The content script loads React and Zod into every frame of every page, about 340 kB                                                                             | Measure the effect on page load. If it matters, load the UI on first use, switch to a lighter renderer, or move the schemas to `zod/mini`                                               |
-| Automated tests do not press the real Chrome shortcut, or call a real provider from the service worker                                                          | Check both by hand before a release. The toolbar button is pressed for real, through the browser's debugging protocol. `pnpm smoke` covers the adapters against the real APIs from Node |
-| A web page can imitate the settings drawer to ask for a key, or cover the real one                                                                              | Accepted for now. A page cannot read the real drawer or the stored key, but nothing stops it from drawing a fake one. Revisit before a public release                                   |
-| After an install or update, the selection button does not work in tabs that were already open, until the tab is reloaded or the toolbar button is pressed there | Accepted for now. Starting the content script in every open tab would need access to all sites up front `[inferred]`                                                                    |
-| Claude Opus 5.5 at low effort once wrote its reasoning into a translation, inside `<thinking>` tags (seen in `pnpm smoke` on 2026-11-24)                        | Not fixed. Find out how often it happens, then tighten the translate prompt or strip the tags, and make the smoke check fail on it                                                      |
-| A content script on every page lengthens Chrome Web Store review                                                                                                | Accepted: the button has to appear wherever text is selected                                                                                                                            |
+| Risk                                                                                                                                                             | Plan                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tauri cannot deliver a focus-preserving panel on Windows                                                                                                         | The desktop spike; Electron fallback                                                                                                                                                                                       |
+| The macOS panel depends on a single-maintainer plugin                                                                                                            | Same spike; the plugin is small enough to fork or replace                                                                                                                                                                  |
+| Accessibility coverage is lower than estimated in key apps                                                                                                       | Measure during the spike; selection-only fallback always works                                                                                                                                                             |
+| Safari kills the background script mid-request                                                                                                                   | Short requests. Page translation sends again what was in progress when its port closes                                                                                                                                     |
+| App Store rejects a bring-your-own-key app                                                                                                                       | Build the iOS app last; keep the extension and desktop independent of it                                                                                                                                                   |
+| Default-translation extension limits are undocumented                                                                                                            | Prototype early in step 4                                                                                                                                                                                                  |
+| The content script loads React, Zod, and the page translation engine into every frame of every page, about 356 kB                                                | Measure the effect on page load. If it matters, load the UI on first use, switch to a lighter renderer, or move the schemas to `zod/mini`                                                                                  |
+| Automated tests do not press the real Chrome shortcut, or call a real provider from the service worker                                                           | Check both by hand before a release. The toolbar button is pressed for real, through the browser's debugging protocol. `pnpm smoke` covers the adapters against the real APIs from Node                                    |
+| A web page can imitate the settings drawer to ask for a key, or cover the real one                                                                               | Accepted for now. A page cannot read the real drawer or the stored key, but nothing stops it from drawing a fake one. Revisit before a public release                                                                      |
+| After an install or update, the selection button does not work in tabs that were already open, until the tab is reloaded or the toolbar button is pressed there  | Accepted for now. Starting the content script in every open tab would need access to all sites up front `[inferred]`                                                                                                       |
+| Claude Opus 5.5 at low effort once wrote its reasoning into a translation, inside `<thinking>` tags (seen in `pnpm smoke` on 2026-11-24)                         | Not fixed for lookups. Find out how often it happens, then tighten the translate prompt or strip the tags, and make the smoke check fail on it. Page translation ignores what a model writes outside its segments          |
+| A small model leaves out or repeats inline tags in a paragraph with many links, and that paragraph stays untranslated (see the live run under Browser extension) | Mending and a second try bring it down to about one paragraph in a hundred on such a page. Open: whether to show the translation without the lost formatting, and whether page translation gets a model setting of its own |
+| Page translation writes into nodes that a page's own scripts manage                                                                                              | No node is removed or given another parent, and a paragraph the page rewrites is read again. Checked by hand on one site built with React. Check more sites before a release                                               |
+| Every page translation request repeats its instructions, about 600 tokens                                                                                        | Prompt caching, once a request's shared prefix is long enough for it `[inferred]`                                                                                                                                          |
+| A content script on every page lengthens Chrome Web Store review                                                                                                 | Accepted: the button has to appear wherever text is selected                                                                                                                                                               |

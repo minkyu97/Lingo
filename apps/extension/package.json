@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p e2e",
     "test": "vitest run",
     "e2e": "pnpm run build:e2e && playwright test",
+    "live:page-translation": "pnpm run build:e2e && node --env-file-if-exists=../../.env.local e2e/page-translation-live.ts",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

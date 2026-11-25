@@ -94,6 +94,12 @@ const runtimeMessageSchema = z.discriminatedUnion("type", [
   /** Background to content script, when the keyboard shortcut is pressed. */
   z.object({ type: z.literal("lookup-selection") }),
   /**
+   * Background to the content scripts of a tab, when the page translation
+   * shortcut is pressed: translate the page, or put it back if it is
+   * translated.
+   */
+  z.object({ type: z.literal("toggle-page-translation") }),
+  /**
    * Settings page to background: ask the provider whether it accepts a key.
    * The answer is a `KeyCheckResult`.
    */

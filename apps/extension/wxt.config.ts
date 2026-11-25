@@ -30,6 +30,10 @@ export default defineConfig({
         suggested_key: { default: "Alt+Shift+L" },
         description: "Translate or define the selected text",
       },
+      "translate-page": {
+        suggested_key: { default: "Alt+Shift+P" },
+        description: "Translate this page, or show the original",
+      },
     },
   },
 });

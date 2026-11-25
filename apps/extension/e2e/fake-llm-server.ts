@@ -8,10 +8,14 @@
  *   from `spec/fixtures`: a dictionary entry as JSON when the request asks
  *   for a JSON schema, plain text otherwise. A key of `revoked-key` gets a
  *   401 here, like a key that passed its check and was withdrawn later.
+ *   A request for a page translation, which holds `<seg>` elements, gets
+ *   an answer made up on the spot by `pretendToTranslate`.
  * - `GET /page` is the page the tests select text on. `GET /strict-page` is
  *   the same page under a content security policy that forbids frames.
- * - `GET /requests` returns every request body received so far, so a test can
- *   check what the extension sent. `DELETE /requests` clears the list.
+ *   `GET /long-page` is a page many screens long, for page translation.
+ * - `GET /requests` returns every request body received so far and when it
+ *   came in, so a test can check what the extension sent. `DELETE /requests`
+ *   clears the list.
  */
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
@@ -29,6 +33,70 @@ const PAGE = `<!doctype html>
     <h1>Test page</h1>
     <p id="text">She sat on the river bank and watched the boats.</p>
     <p>A second paragraph that is not part of the context.</p>
+  </body>
+</html>`;
+
+const FILLER_PARAGRAPHS = 60;
+
+/**
+ * A page many screens long. It has text in several styles, a link, code, a
+ * button that adds comments, and a button that rewrites a paragraph.
+ */
+const LONG_PAGE = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>A long page</title>
+    <style>
+      body { font: 16px/1.5 sans-serif; margin: 40px; }
+      .filler p { height: 120px; margin: 0 0 20px; }
+      .big {
+        font-size: 24px;
+        color: rgb(200, 0, 0);
+        background-color: rgb(255, 240, 150);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Long page</h1>
+    <p id="styled">Plain words, <b id="bold">bold words</b>, <i id="italic">italic words</i>, <u id="underlined">underlined words</u>, <span id="big" class="big">big red words</span>, and <a id="link" href="/page">a link</a>.</p>
+    <p id="inline-code">Call <code>fetchData()</code> before rendering.</p>
+    <pre id="code"><code>const total = add(1, 2); // adds numbers</code></pre>
+    <p id="broken">This one comes back (broken) with <b>its tags</b> lost.</p>
+    <p id="live">Words the page will rewrite.</p>
+    <button id="rewrite" type="button">Rewrite</button>
+    <section id="comments">
+      <h2>Comments</h2>
+      <p class="comment">First comment.</p>
+    </section>
+    <button id="more" type="button">Show more comments</button>
+    <div class="filler">
+${Array.from(
+  { length: FILLER_PARAGRAPHS },
+  (_, index) =>
+    `      <p id="p${index + 1}">Paragraph ${index + 1} of the long page.</p>`,
+).join("\n")}
+    </div>
+    <script>
+      document.querySelector("#more").addEventListener("click", () => {
+        for (const number of [2, 3, 4]) {
+          const comment = document.createElement("p");
+          comment.className = "comment";
+          comment.innerHTML =
+            "Comment number " + number + " has <em>emphasis</em>.";
+          document.querySelector("#comments").append(comment);
+        }
+      });
+      document.querySelector("#rewrite").addEventListener("click", () => {
+        document.querySelector("#live").firstChild.data =
+          "Fresh words from the page.";
+      });
+      window.clicks = 0;
+      document.querySelector("#link").addEventListener("click", (event) => {
+        event.preventDefault();
+        window.clicks += 1;
+      });
+    </script>
   </body>
 </html>`;
 
@@ -79,8 +147,116 @@ function asksForJson(body: unknown): boolean {
   return Boolean(request.output_config?.format ?? request.text?.format);
 }
 
+const SEGMENT = /<seg id="(\d+)">([\s\S]*?)<\/seg>/g;
+/** What stays as it is: kept text with its tags, other tags, and entities. */
+const NOT_WORDS = /<k(\d+)>[\s\S]*?<\/k\1>|<\/?[gx]\d+\s*\/?>|&\w+;/g;
+const GROUP_TAG = /<(\/?)g\d+>/g;
+
+/** The user message of a request, in either API's shape. */
+function userMessage(body: unknown): string {
+  const request = body as {
+    messages?: { content?: unknown }[];
+    input?: { content?: unknown }[];
+  };
+  const content = (request.messages ?? request.input)?.[0]?.content;
+  return typeof content === "string" ? content : "";
+}
+
+/**
+ * Stands in for a translation, in a way a test can predict: the words are
+ * put in upper case, and inline tags stay around their words. In a segment
+ * with several tags at the top level, the last one moves to the front, as
+ * word order does in a real translation. A segment that says "(broken)"
+ * comes back without its tags, like a model that lost them.
+ */
+function pretendToTranslate(text: string): string {
+  if (text.includes("(broken)")) {
+    return text.replace(/<\/?[gkx]\d+\s*\/?>/g, "").toUpperCase();
+  }
+
+  let translated = "";
+  let position = 0;
+  for (const match of text.matchAll(NOT_WORDS)) {
+    translated += text.slice(position, match.index).toUpperCase() + match[0];
+    position = match.index + match[0].length;
+  }
+  translated += text.slice(position).toUpperCase();
+
+  // Where each top-level group starts and ends.
+  const groups: { start: number; end: number }[] = [];
+  let depth = 0;
+  let start = 0;
+  for (const tag of translated.matchAll(GROUP_TAG)) {
+    if (tag[1] === "") {
+      if (depth === 0) start = tag.index;
+      depth += 1;
+    } else {
+      depth -= 1;
+      if (depth === 0) groups.push({ start, end: tag.index + tag[0].length });
+    }
+  }
+  const last = groups.at(-1);
+  if (!last || groups.length < 2) return translated;
+  return `${translated.slice(last.start, last.end)} ${translated.slice(0, last.start)}${translated.slice(last.end)}`;
+}
+
+const sseEvent = (name: string, data: object) =>
+  `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
+
+/** An Anthropic stream that answers with the given pieces of text. */
+function anthropicStream(pieces: string[]): string[] {
+  return [
+    sseEvent("message_start", {
+      type: "message_start",
+      message: {
+        id: "msg_page",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-5-5",
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    }),
+    sseEvent("content_block_start", {
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    }),
+    ...pieces.map((text) =>
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text },
+      }),
+    ),
+    sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }),
+    sseEvent("message_delta", {
+      type: "message_delta",
+      delta: { stop_reason: "end_turn", stop_sequence: null },
+      usage: { output_tokens: 1 },
+    }),
+    sseEvent("message_stop", { type: "message_stop" }),
+  ];
+}
+
+/** The stream that answers a page translation request, segment by segment. */
+function pageTranslationStream(message: string): string[] {
+  const pieces: string[] = [];
+  for (const [, id, text = ""] of message.matchAll(SEGMENT)) {
+    const answer = `<seg id="${id}">${pretendToTranslate(text)}</seg>\n`;
+    // In two pieces, so that the reader has to put a segment together.
+    const middle = Math.floor(answer.length / 2);
+    pieces.push(answer.slice(0, middle), answer.slice(middle));
+  }
+  return anthropicStream(pieces);
+}
+
 interface RecordedRequest {
   path: string;
+  /** When the request came in, in milliseconds since the epoch. */
+  time: number;
   body: unknown;
 }
 
@@ -113,6 +289,13 @@ const server = createServer(async (request, response) => {
     response
       .writeHead(200, { "content-type": "text/html; charset=utf-8" })
       .end(PAGE);
+    return;
+  }
+
+  if (request.method === "GET" && path === "/long-page") {
+    response
+      .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end(LONG_PAGE);
     return;
   }
 
@@ -152,7 +335,7 @@ const server = createServer(async (request, response) => {
   const streams = STREAMS[path];
   if (request.method === "POST" && streams) {
     const body: unknown = JSON.parse(await readBody(request));
-    requests.push({ path, body });
+    requests.push({ path, time: Date.now(), body });
 
     if (key === "revoked-key") {
       response.writeHead(401, json).end(JSON.stringify(UNAUTHORIZED));
@@ -165,6 +348,15 @@ const server = createServer(async (request, response) => {
       "cache-control": "no-cache",
     });
     // Send one event at a time, so the extension sees a real stream.
+    const message = userMessage(body);
+    if (path === "/v1/messages" && message.includes("<seg id=")) {
+      for (const part of pageTranslationStream(message)) {
+        response.write(part);
+        await sleep(2);
+      }
+      response.end();
+      return;
+    }
     const recorded = asksForJson(body) ? streams.json : streams.text;
     for (const event of fixture(recorded).split("\n\n")) {
       if (event.trim() === "") continue;
