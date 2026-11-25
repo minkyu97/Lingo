@@ -3,6 +3,8 @@ import { ContextScreen } from "./ContextScreen.tsx";
 import { EngineScreen } from "./EngineScreen.tsx";
 import { LanguageScreen } from "./LanguageScreen.tsx";
 import { type DetailScreen, MainScreen } from "./MainScreen.tsx";
+import { PageModelScreen } from "./PageModelScreen.tsx";
+import { RequestRateScreen } from "./RequestRateScreen.tsx";
 import type { SettingsPanelProps } from "./types.ts";
 
 /**
@@ -20,6 +22,10 @@ export function SettingsPanel(props: SettingsPanelProps) {
       {screen === "engine" && <EngineScreen {...props} onBack={back} />}
       {screen === "language" && <LanguageScreen {...props} onBack={back} />}
       {screen === "context" && <ContextScreen {...props} onBack={back} />}
+      {screen === "pageModel" && <PageModelScreen {...props} onBack={back} />}
+      {screen === "requestRate" && (
+        <RequestRateScreen {...props} onBack={back} />
+      )}
     </div>
   );
 }

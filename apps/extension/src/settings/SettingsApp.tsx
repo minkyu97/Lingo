@@ -12,6 +12,7 @@ import {
   pageSwitchAnswerSchema,
   type RuntimeMessage,
 } from "../messaging.ts";
+import { PAGE_TRANSLATION_COMMAND } from "../page-translation/protocol.ts";
 import {
   type ApiKeys,
   loadApiKeys,
@@ -84,7 +85,7 @@ export function SettingsApp({ onClose, inPage = false }: SettingsAppProps) {
   const page = usePageSwitch(inPage);
   const [settings, setSettings] = useState<Settings>();
   const [apiKeys, setApiKeys] = useState<ApiKeys>({});
-  const [shortcut, setShortcut] = useState("");
+  const [shortcuts, setShortcuts] = useState<string[]>([]);
   const [keyStatus, setKeyStatus] = useState<KeyStatus>("idle");
   const savedNotice = useRef<ReturnType<typeof setTimeout>>(undefined);
   /** Counts key submissions, so that only the latest one reports back. */
@@ -94,8 +95,11 @@ export function SettingsApp({ onClose, inPage = false }: SettingsAppProps) {
     void loadSettings().then(setSettings);
     void loadApiKeys().then(setApiKeys);
     void browser.commands.getAll().then((commands) => {
-      const lookup = commands.find(({ name }) => name === LOOKUP_COMMAND);
-      setShortcut(lookup?.shortcut ?? "");
+      // Lookup first, then page translation, leaving out what is not set.
+      const set = [LOOKUP_COMMAND, PAGE_TRANSLATION_COMMAND]
+        .map((name) => commands.find((command) => command.name === name))
+        .flatMap((command) => command?.shortcut || []);
+      setShortcuts(set);
     });
     return () => clearTimeout(savedNotice.current);
   }, []);
@@ -160,7 +164,7 @@ export function SettingsApp({ onClose, inPage = false }: SettingsAppProps) {
       providers={PROVIDERS}
       apiKeys={apiKeys}
       keyStatus={keyStatus}
-      shortcut={shortcut}
+      shortcuts={shortcuts}
       version={browser.runtime.getManifest().version}
       sourceUrl={SOURCE_URL}
       onSettingsChange={changeSettings}

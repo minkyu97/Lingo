@@ -19,14 +19,14 @@ export const MAX_BATCH_SEGMENTS = 40;
 export const MAX_BATCH_CHARS = 20_000;
 
 /**
- * How page translation behaves. Stored by the background, which hands a
- * content script the options when it connects. Anything missing or invalid
- * falls back to its default.
+ * How page translation is tuned. These are not offered in settings: the
+ * defaults are meant to be right, and end-to-end tests change them to make
+ * a small page behave like a large one. The background hands a content
+ * script the options when it connects. Anything missing or invalid falls
+ * back to its default.
  */
 export const pageTranslationOptionsSchema = z
   .object({
-    /** Most requests started in any one second, over all tabs. */
-    requestsPerSecond: z.number().int().min(1).max(20).catch(3),
     /**
      * How far past the edge of the viewport text is translated before it is
      * scrolled to, in viewport heights.
@@ -36,7 +36,6 @@ export const pageTranslationOptionsSchema = z
     batchChars: z.number().int().min(1).max(MAX_BATCH_CHARS).catch(1500),
   })
   .catch({
-    requestsPerSecond: 3,
     aheadViewports: 1,
     batchChars: 1500,
   });

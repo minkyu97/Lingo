@@ -80,7 +80,10 @@ export function handlePageTranslationPort(
       const provider = deps.createProvider({
         provider: settings.provider,
         apiKey,
-        model: settings.models[settings.provider],
+        // Pages have a model of their own, apart from the one for lookups.
+        model:
+          settings.pageModels[settings.provider] ??
+          PROVIDERS[settings.provider].defaultPageModel,
         baseURL: deps.baseURL?.(settings.provider),
       });
       const chunks = provider.stream(
@@ -126,8 +129,8 @@ export function handlePageTranslationPort(
       return;
     }
     try {
-      const { requestsPerSecond } = await deps.loadOptions();
-      await deps.limiter.acquire(requestsPerSecond, abort.signal);
+      const { pageRequestsPerSecond } = await deps.loadSettings();
+      await deps.limiter.acquire(pageRequestsPerSecond, abort.signal);
       post({ type: "permit" });
     } catch {
       // The port closed while it was waiting for its turn.

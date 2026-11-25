@@ -15,12 +15,24 @@ export interface Settings {
   contextAwareness: boolean;
   /** Upper bound on the surrounding text that is sent, in characters. */
   maxContextChars: number;
+  /**
+   * Model ID per provider for translating whole pages. A missing entry means
+   * that provider's default for pages, which is a fast one.
+   */
+  pageModels: Partial<Record<ProviderId, string>>;
+  /** Most page translation requests started in any one second. */
+  pageRequestsPerSecond: number;
 }
 
 export const MAX_CONTEXT_CHARS_LIMIT = 4000;
 
 /** The longest contexts offered in settings, in characters. */
 export const CONTEXT_CHAR_PRESETS: readonly number[] = [500, 1000, 2000, 4000];
+
+/** The request rates offered in settings, in requests per second. */
+export const PAGE_REQUEST_RATE_PRESETS: readonly number[] = [1, 2, 3, 5, 10];
+
+const MAX_PAGE_REQUESTS_PER_SECOND = 10;
 
 /** Languages offered as translation targets, as BCP 47 tags. */
 export const TARGET_LANGUAGES: readonly string[] = [
@@ -77,6 +89,8 @@ export function defaultSettings(locale?: string): Settings {
     targetLanguage: targetLanguageFor(locale),
     contextAwareness: true,
     maxContextChars: 1000,
+    pageModels: {},
+    pageRequestsPerSecond: 3,
   };
 }
 
@@ -101,6 +115,11 @@ export function normalizeSettings(value: unknown, locale?: string): Settings {
         .number()
         .transform(clampContextChars)
         .catch(defaults.maxContextChars),
+      pageModels: perProviderTextSchema.catch({}),
+      pageRequestsPerSecond: z
+        .number()
+        .transform(clampPageRequestRate)
+        .catch(defaults.pageRequestsPerSecond),
     })
     .catch(defaults);
 
@@ -149,6 +168,10 @@ function targetLanguageFor(locale: string | undefined): string {
 
 function clampContextChars(value: number): number {
   return Math.min(MAX_CONTEXT_CHARS_LIMIT, Math.max(0, Math.round(value)));
+}
+
+function clampPageRequestRate(value: number): number {
+  return Math.min(MAX_PAGE_REQUESTS_PER_SECOND, Math.max(1, Math.round(value)));
 }
 
 function isLanguageTag(value: string): boolean {

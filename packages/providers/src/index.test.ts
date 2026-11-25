@@ -16,7 +16,9 @@ describe("PROVIDERS", () => {
 
   it("lists each default model among the offered models", () => {
     for (const info of Object.values(PROVIDERS)) {
-      expect(info.models.map((model) => model.id)).toContain(info.defaultModel);
+      const offered = info.models.map((model) => model.id);
+      expect(offered).toContain(info.defaultModel);
+      expect(offered).toContain(info.defaultPageModel);
     }
   });
 });

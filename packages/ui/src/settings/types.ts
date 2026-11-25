@@ -4,6 +4,8 @@ import type { ProviderId, Settings } from "@lingo/core";
 export interface ProviderChoice {
   label: string;
   defaultModel: string;
+  /** The model for translating whole pages when none is chosen. */
+  defaultPageModel: string;
   /** Models to offer. Any other model ID can still be typed in. */
   models: readonly { id: string; label: string }[];
   /** Where a user creates an API key. */
@@ -32,8 +34,8 @@ export interface SettingsPanelProps {
   /** The stored API key of each provider that has one. */
   apiKeys: Partial<Record<ProviderId, string>>;
   keyStatus: KeyStatus;
-  /** The lookup shortcut as the platform writes it. Empty when none is set. */
-  shortcut: string;
+  /** The shortcuts that are set, as the platform writes them. */
+  shortcuts: readonly string[];
   version: string;
   sourceUrl: string;
   /** Called with the whole settings each time one of them changes. */

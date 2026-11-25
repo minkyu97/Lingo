@@ -5,7 +5,7 @@ import { FieldMessage } from "../controls/FieldMessage.tsx";
 import { IconButton } from "../controls/IconButton.tsx";
 import { SegmentedControl } from "../controls/SegmentedControl.tsx";
 import { TextField } from "../controls/TextField.tsx";
-import { OptionRow } from "./OptionRow.tsx";
+import { ModelList } from "./ModelList.tsx";
 import { PanelHeader } from "./PanelHeader.tsx";
 import type { DetailScreenProps, KeyStatus, ProviderChoice } from "./types.ts";
 
@@ -65,7 +65,8 @@ export function EngineScreen({
 
           <h2 className="lingo-group-label">Model</h2>
           <ModelList
-            provider={provider}
+            models={provider.models}
+            defaultModel={provider.defaultModel}
             model={settings.models[providerId]}
             onChange={setModel}
           />
@@ -191,62 +192,4 @@ function KeyMessage({
         </FieldMessage>
       );
   }
-}
-
-interface ModelListProps {
-  provider: ProviderChoice;
-  /** The stored model ID. Undefined means the provider's default. */
-  model: string | undefined;
-  onChange: (model: string | undefined) => void;
-}
-
-/** The provider's models, and a field for any other model ID. */
-function ModelList({ provider, model, onChange }: ModelListProps) {
-  const chosen = model ?? provider.defaultModel;
-  const listed = provider.models.some(({ id }) => id === chosen);
-  // "Other…" stays selected while its field is still empty.
-  const [other, setOther] = useState(!listed);
-  const [typed, setTyped] = useState(listed ? "" : chosen);
-
-  return (
-    <div role="radiogroup" aria-label="Model">
-      {provider.models.map(({ id, label }) => (
-        <OptionRow
-          key={id}
-          name="model"
-          label={label}
-          description={id === provider.defaultModel ? "Default" : undefined}
-          checked={!other && id === chosen}
-          onSelect={() => {
-            setOther(false);
-            onChange(id);
-          }}
-        />
-      ))}
-      <OptionRow
-        name="model"
-        label="Other…"
-        checked={other}
-        onSelect={() => {
-          setOther(true);
-          // Until an ID is typed, the provider's default model answers.
-          onChange(typed.trim() || undefined);
-        }}
-      />
-      {other && (
-        <div className="lingo-settings__field">
-          <TextField
-            label="Model ID"
-            spellCheck={false}
-            placeholder={provider.defaultModel}
-            value={typed}
-            onChange={(value) => {
-              setTyped(value);
-              onChange(value.trim() || undefined);
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
 }

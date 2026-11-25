@@ -57,6 +57,7 @@ export {
   MAX_CONTEXT_CHARS_LIMIT,
   nativeLanguageName,
   normalizeSettings,
+  PAGE_REQUEST_RATE_PRESETS,
   PROVIDER_IDS,
   type ProviderId,
   perProviderTextSchema,

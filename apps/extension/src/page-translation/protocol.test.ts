@@ -62,11 +62,7 @@ describe("parsePageRequest", () => {
 });
 
 describe("pageTranslationOptionsSchema", () => {
-  const defaults = {
-    requestsPerSecond: 3,
-    aheadViewports: 1,
-    batchChars: 1500,
-  };
+  const defaults = { aheadViewports: 1, batchChars: 1500 };
 
   it("falls back to the defaults for what is missing", () => {
     expect(pageTranslationOptionsSchema.parse({})).toEqual(defaults);
@@ -77,16 +73,16 @@ describe("pageTranslationOptionsSchema", () => {
   it("keeps valid values and replaces invalid ones", () => {
     expect(
       pageTranslationOptionsSchema.parse({
-        requestsPerSecond: 10,
         aheadViewports: 99,
         batchChars: 400,
       }),
-    ).toEqual({ ...defaults, requestsPerSecond: 10, batchChars: 400 });
-    expect(
-      pageTranslationOptionsSchema.parse({ requestsPerSecond: 0 }),
-    ).toEqual(defaults);
-    expect(
-      pageTranslationOptionsSchema.parse({ requestsPerSecond: 2.5 }),
-    ).toEqual(defaults);
+    ).toEqual({ ...defaults, batchChars: 400 });
+    expect(pageTranslationOptionsSchema.parse({ batchChars: 0 })).toEqual(
+      defaults,
+    );
+    expect(pageTranslationOptionsSchema.parse({ aheadViewports: 2 })).toEqual({
+      ...defaults,
+      aheadViewports: 2,
+    });
   });
 });

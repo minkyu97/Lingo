@@ -6,6 +6,7 @@ import {
   type Settings,
 } from "@lingo/core";
 import type { CreateProviderOptions } from "@lingo/providers";
+import { PROVIDERS } from "@lingo/providers/catalog";
 import { describe, expect, it, vi } from "vitest";
 import {
   handlePageTranslationPort,
@@ -102,15 +103,11 @@ async function finished(events: PageEvent[]) {
 
 describe("handlePageTranslationPort", () => {
   it("tells the content script its options as soon as the port opens", async () => {
-    const { events } = setup({ options: { requestsPerSecond: 5 } });
+    const { events } = setup({ options: { batchChars: 900 } });
     await vi.waitFor(() => expect(events).toHaveLength(1));
     expect(events[0]).toEqual({
       type: "config",
-      options: {
-        requestsPerSecond: 5,
-        aheadViewports: 1,
-        batchChars: 1500,
-      },
+      options: { aheadViewports: 1, batchChars: 900 },
       targetLanguage: "ko",
       provider: "Anthropic",
     });
@@ -142,9 +139,14 @@ describe("handlePageTranslationPort", () => {
     );
   });
 
-  it("uses the provider and model from the settings", async () => {
+  it("uses the provider from the settings, and its model for pages", async () => {
     const { events, send, created } = setup({
-      settings: { provider: "openai", models: { openai: "gpt-6-luna" } },
+      settings: {
+        provider: "openai",
+        // The model for lookups is not the one for pages.
+        models: { openai: "gpt-6.2-sol" },
+        pageModels: { openai: "gpt-6-luna" },
+      },
     });
     send(translate);
     await finished(events);
@@ -153,6 +155,16 @@ describe("handlePageTranslationPort", () => {
       apiKey: "key",
       model: "gpt-6-luna",
     });
+  });
+
+  it("uses the provider's fast model when none is chosen for pages", async () => {
+    const { events, send, created } = setup({
+      settings: { models: { anthropic: "claude-opus-5-5" } },
+    });
+    send(translate);
+    await finished(events);
+    expect(created[0]?.model).toBe(PROVIDERS.anthropic.defaultPageModel);
+    expect(created[0]?.model).not.toBe("claude-opus-5-5");
   });
 
   it("serves several requests on one port at the same time", async () => {
@@ -197,10 +209,12 @@ describe("handlePageTranslationPort", () => {
     });
   });
 
-  it("grants permits at the rate in the options", async () => {
+  it("grants permits at the rate in the settings", async () => {
     vi.useFakeTimers();
     try {
-      const { events, send } = setup({ options: { requestsPerSecond: 2 } });
+      const { events, send } = setup({
+        settings: { pageRequestsPerSecond: 2 },
+      });
       for (let i = 0; i < 3; i++) send({ type: "permit" });
 
       await vi.advanceTimersByTimeAsync(10);

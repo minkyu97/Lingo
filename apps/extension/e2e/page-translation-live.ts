@@ -302,7 +302,10 @@ async function toggle(page: Page, worker: Worker) {
     const { tabs } = (globalThis as unknown as { chrome: ExtensionApi }).chrome;
     const [tab] = await tabs.query({ active: true, lastFocusedWindow: true });
     if (tab?.id === undefined) throw new Error("No tab is in front");
-    await tabs.sendMessage(tab.id, { type: "toggle-page-translation" });
+    await tabs.sendMessage(tab.id, {
+      type: "page-translation",
+      action: "toggle",
+    });
   });
 }
 
@@ -388,7 +391,7 @@ async function run() {
     context.serviceWorkers()[0] ??
     (await context.waitForEvent("serviceworker"));
   await worker.evaluate(
-    async ({ provider, model, language, pageTranslation }) => {
+    async ({ provider, model, language, requestsPerSecond }) => {
       const { storage } = (globalThis as unknown as { chrome: ExtensionApi })
         .chrome;
       await storage.local.set({
@@ -396,21 +399,17 @@ async function run() {
         apiKeys: { [provider]: "set-by-the-relay" },
         settings: {
           provider,
-          models: { [provider]: model },
+          pageModels: { [provider]: model },
+          pageRequestsPerSecond: requestsPerSecond,
           targetLanguage: language,
-          contextAwareness: true,
-          maxContextChars: 1000,
         },
-        pageTranslation,
       });
     },
     {
       provider: flags.provider,
       model: flags.model,
       language: flags.language,
-      pageTranslation: {
-        requestsPerSecond: Number(flags["requests-per-second"]),
-      },
+      requestsPerSecond: Number(flags["requests-per-second"]),
     },
   );
 

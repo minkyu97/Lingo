@@ -36,19 +36,31 @@ interface Progress {
   failures: Record<string, number>;
 }
 
-/** Stores an API key and the page translation options, as settings would. */
+interface Configuration {
+  /** How page translation is tuned, to make a small page act like a large one. */
+  tuning?: object;
+  /** Settings to store, as the settings panel would. */
+  settings?: object;
+  /** The API keys to store. One for Anthropic unless told otherwise. */
+  apiKeys?: object;
+}
+
+/** Puts into storage what a test needs to be there before it starts. */
 async function configure(
   worker: Worker,
-  options: object = {},
-  apiKeys: object = { anthropic: "test-key" },
+  {
+    tuning = {},
+    settings = {},
+    apiKeys = { anthropic: "test-key" },
+  }: Configuration = {},
 ) {
   await worker.evaluate(
-    async ({ pageTranslation, apiKeys }) => {
+    async (items) => {
       const { storage } = (globalThis as unknown as { chrome: ExtensionApi })
         .chrome;
-      await storage.local.set({ apiKeys, pageTranslation });
+      await storage.local.set(items);
     },
-    { pageTranslation: options, apiKeys },
+    { pageTranslation: tuning, settings, apiKeys },
   );
 }
 
@@ -124,7 +136,7 @@ test("translates what is near the viewport, and more when scrolled", async ({
   context,
   worker,
 }) => {
-  await configure(worker, { aheadViewports: 1 });
+  await configure(worker, { tuning: { aheadViewports: 1 } });
   const page = await openLongPage(context, worker);
 
   await toggleTranslation(worker);
@@ -290,9 +302,8 @@ test("sends no more requests per second than the settings allow", async ({
 }) => {
   // One paragraph per request, and enough of them near to need many.
   await configure(worker, {
-    requestsPerSecond: 2,
-    batchChars: 1,
-    aheadViewports: 2,
+    settings: { pageRequestsPerSecond: 2 },
+    tuning: { batchChars: 1, aheadViewports: 2 },
   });
   const page = await openLongPage(context, worker);
 
@@ -417,7 +428,7 @@ test("says so in the page bar when there is no API key, and goes on once there i
   context,
   worker,
 }, testInfo) => {
-  await configure(worker, {}, {});
+  await configure(worker, { apiKeys: {} });
   const page = await openLongPage(context, worker);
 
   await toggleTranslation(worker);
@@ -448,7 +459,7 @@ test("stops when the close button of a problem is pressed", async ({
   context,
   worker,
 }) => {
-  await configure(worker, {}, {});
+  await configure(worker, { apiKeys: {} });
   const page = await openLongPage(context, worker);
   await toggleTranslation(worker);
   await expect(pageBar(page)).toContainText("Add an API key");
@@ -486,4 +497,44 @@ test("translates the frames inside a page along with it", async ({
 
   await expect(page.locator("h1")).toHaveText("Outer page");
   await expect(inner.locator("h1")).toHaveText("Test page");
+});
+
+test("has a model and a request rate of its own in the settings", async ({
+  context,
+  worker,
+  extensionId,
+}, testInfo) => {
+  await configure(worker);
+  const page = await openLongPage(context, worker);
+  await pressToolbarButton(page, extensionId);
+  const panel = drawer(page);
+  const row = (name: RegExp) => panel.getByRole("button", { name });
+
+  // Pages start with the fast model, whatever lookups use.
+  await expect(row(/^Translation engine/)).toContainText("Claude Opus 5.5");
+  await expect(row(/^Model/)).toContainText("Claude Haiku 5.5");
+  await expect(row(/^Request rate/)).toContainText("3 per second");
+  await expect(row(/^Keyboard shortcuts/)).toBeVisible();
+
+  await row(/^Model/).click();
+  await expect(panel.getByRole("heading", { level: 1 })).toHaveText(
+    "Page model",
+  );
+  await page.screenshot({ path: testInfo.outputPath("page-model.png") });
+  await panel.getByRole("radio", { name: /Claude Sonnet 5.5/ }).check();
+  await panel.getByRole("button", { name: "Back" }).click();
+  await expect(row(/^Model/)).toContainText("Claude Sonnet 5.5");
+
+  await row(/^Request rate/).click();
+  await page.screenshot({ path: testInfo.outputPath("request-rate.png") });
+  await panel.getByRole("radio", { name: "5", exact: true }).check();
+  await panel.getByRole("button", { name: "Back" }).click();
+  await expect(row(/^Request rate/)).toContainText("5 per second");
+  await page.screenshot({ path: testInfo.outputPath("panel.png") });
+
+  // The page is translated with the model chosen for pages.
+  await panel.getByRole("button", { name: "Translate", exact: true }).click();
+  await expect(page.locator("h1")).toHaveText("LONG PAGE");
+  const [sent] = await recordedRequests(page);
+  expect(sent?.body.model).toBe("claude-sonnet-5-5");
 });

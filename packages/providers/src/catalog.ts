@@ -44,6 +44,12 @@ export const ANTHROPIC_MODELS: Readonly<Record<string, AnthropicModelTraits>> =
 
 export const ANTHROPIC_DEFAULT_MODEL = "claude-opus-5-5";
 
+/**
+ * The model that translates whole pages unless another is chosen. A page
+ * takes many requests, and the reader waits for each, so it is the fast one.
+ */
+export const ANTHROPIC_DEFAULT_PAGE_MODEL = "claude-haiku-5-5";
+
 export interface OpenAIModelTraits {
   label: string;
   /** Can be held to a JSON schema with `text.format`. */
@@ -62,9 +68,18 @@ export const OPENAI_MODELS: Readonly<Record<string, OpenAIModelTraits>> = {
 
 export const OPENAI_DEFAULT_MODEL = "gpt-6.2-sol";
 
+/**
+ * The model that translates whole pages unless another is chosen. Here it is
+ * the default for lookups: in a live run on 2026-11-25, neither of the other
+ * two models translated a page faster.
+ */
+export const OPENAI_DEFAULT_PAGE_MODEL = "gpt-6.2-sol";
+
 export interface ProviderInfo {
   label: string;
   defaultModel: string;
+  /** The model for translating whole pages when none is chosen. */
+  defaultPageModel: string;
   /** Models to offer in settings. Other model IDs can still be used. */
   models: readonly { id: string; label: string }[];
   /** Where a user creates an API key. */
@@ -75,12 +90,14 @@ export const PROVIDERS: Readonly<Record<ProviderId, ProviderInfo>> = {
   anthropic: {
     label: "Anthropic",
     defaultModel: ANTHROPIC_DEFAULT_MODEL,
+    defaultPageModel: ANTHROPIC_DEFAULT_PAGE_MODEL,
     models: modelList(ANTHROPIC_MODELS),
     keysUrl: "https://platform.claude.com/settings/keys",
   },
   openai: {
     label: "OpenAI",
     defaultModel: OPENAI_DEFAULT_MODEL,
+    defaultPageModel: OPENAI_DEFAULT_PAGE_MODEL,
     models: modelList(OPENAI_MODELS),
     keysUrl: "https://platform.openai.com/api-keys",
   },
