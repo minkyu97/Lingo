@@ -54,7 +54,11 @@ const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <StrictMode>
-      {expected ? <SettingsApp onClose={closeDrawer} /> : <Unavailable />}
+      {expected ? (
+        <SettingsApp onClose={closeDrawer} inPage />
+      ) : (
+        <Unavailable />
+      )}
     </StrictMode>,
   );
 }

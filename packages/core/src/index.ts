@@ -30,6 +30,15 @@ export {
   prepareLookup,
 } from "./lookup.ts";
 export { chooseMode } from "./mode.ts";
+export {
+  buildPageTranslationRequest,
+  createSegmentReader,
+  escapeMarkupText,
+  type MarkupNode,
+  type PageSegment,
+  type PageTranslationInput,
+  parseMarkup,
+} from "./page-translation.ts";
 export { parsePartialJson } from "./partial-json.ts";
 export {
   buildLookupRequest,
@@ -48,6 +57,7 @@ export {
   MAX_CONTEXT_CHARS_LIMIT,
   nativeLanguageName,
   normalizeSettings,
+  PAGE_REQUEST_RATE_PRESETS,
   PROVIDER_IDS,
   type ProviderId,
   perProviderTextSchema,

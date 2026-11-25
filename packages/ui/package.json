@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./lookup.css": "./src/styles/lookup.css",
+    "./page.css": "./src/styles/page.css",
     "./settings.css": "./src/styles/settings.css"
   },
   "scripts": {

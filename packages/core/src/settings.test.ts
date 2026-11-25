@@ -6,6 +6,7 @@ import {
   MAX_CONTEXT_CHARS_LIMIT,
   nativeLanguageName,
   normalizeSettings,
+  PAGE_REQUEST_RATE_PRESETS,
   perProviderTextSchema,
   TARGET_LANGUAGES,
 } from "./settings.ts";
@@ -41,8 +42,40 @@ describe("normalizeSettings", () => {
       targetLanguage: "ja",
       contextAwareness: false,
       maxContextChars: 500,
+      pageModels: { openai: "some-fast-model" },
+      pageRequestsPerSecond: 5,
     };
     expect(normalizeSettings(stored, "ko")).toEqual(stored);
+  });
+
+  it("fills in what settings stored before a new one lack", () => {
+    const stored = {
+      provider: "openai",
+      models: {},
+      targetLanguage: "ja",
+      contextAwareness: true,
+      maxContextChars: 1000,
+    };
+    expect(normalizeSettings(stored, "ko")).toEqual({
+      ...stored,
+      pageModels: {},
+      pageRequestsPerSecond: 3,
+    });
+  });
+
+  it("keeps the request rate for pages within what a provider can take", () => {
+    const rate = (value: unknown) =>
+      normalizeSettings({ pageRequestsPerSecond: value }, "ko")
+        .pageRequestsPerSecond;
+    expect(rate(1)).toBe(1);
+    expect(rate(0)).toBe(1);
+    expect(rate(2.4)).toBe(2);
+    expect(rate(500)).toBe(10);
+    expect(rate("fast")).toBe(3);
+    // Every rate offered in settings is one that is kept as it is.
+    for (const preset of PAGE_REQUEST_RATE_PRESETS) {
+      expect(rate(preset)).toBe(preset);
+    }
   });
 
   it("replaces invalid fields one by one", () => {
@@ -53,6 +86,8 @@ describe("normalizeSettings", () => {
         targetLanguage: "not a tag",
         contextAwareness: "yes",
         maxContextChars: "many",
+        pageModels: "fast",
+        pageRequestsPerSecond: null,
       },
       "ko",
     );

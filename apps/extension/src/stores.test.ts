@@ -25,6 +25,8 @@ describe("settings", () => {
       targetLanguage: "ja",
       contextAwareness: false,
       maxContextChars: 400,
+      pageModels: { openai: "gpt-6-luna" },
+      pageRequestsPerSecond: 5,
     };
     await saveSettings(settings);
     expect(await loadSettings()).toEqual(settings);

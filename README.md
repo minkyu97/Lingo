@@ -2,7 +2,7 @@
 
 An LLM-based, all-in-one translation app for the browser, the desktop, and mobile.
 
-**Status: early development.** The browser extension can translate or define selected text on any page. Chat refinement, full-page translation, the desktop app, and the mobile app are not built yet.
+**Status: early development.** The browser extension can translate or define selected text on any page, and translate a whole page. Chat refinement, the desktop app, and the mobile app are not built yet.
 
 ## What makes it different
 
@@ -39,7 +39,8 @@ You need [mise](https://mise.jdx.dev) and Chrome 140 or later.
 3. Open `chrome://extensions`, turn on developer mode, choose "Load unpacked", and select `apps/extension/.output/chrome-mv3`.
 4. The settings open in a tab. Under "Translation engine", enter an Anthropic or OpenAI API key. Lingo checks the key with the provider and then stores it in your browser.
 5. Select text on any page and press the Lingo button that appears next to it, or press Alt+Shift+L.
-6. To change the settings later, press the Lingo button in the browser's toolbar. They open in a panel inside the page.
+6. To translate a whole page, press the Lingo button in the browser's toolbar and then "Translate", or press Alt+Shift+P. Lingo translates what is on screen and a little beyond it, and goes on as you scroll. "Show original" in the bar at the bottom of the page puts the page back.
+7. The same toolbar button opens the settings, in a panel inside the page.
 
 For the development commands and conventions, see [AGENTS.md](AGENTS.md).
 

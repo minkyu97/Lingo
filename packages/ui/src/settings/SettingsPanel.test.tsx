@@ -10,6 +10,7 @@ const providers: SettingsPanelProps["providers"] = {
   anthropic: {
     label: "Anthropic",
     defaultModel: "claude-opus-5-5",
+    defaultPageModel: "claude-haiku-5-5",
     models: [
       { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
       { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" },
@@ -19,6 +20,7 @@ const providers: SettingsPanelProps["providers"] = {
   openai: {
     label: "OpenAI",
     defaultModel: "gpt-6.2-sol",
+    defaultPageModel: "gpt-6.2-sol",
     models: [{ id: "gpt-6.2-sol", label: "GPT-6.2 Sol" }],
     keysUrl: "https://keys.example/openai",
   },
@@ -38,7 +40,7 @@ function renderPanel(props: Partial<SettingsPanelProps> = {}) {
     providers,
     apiKeys: { anthropic: "sk-stored" },
     keyStatus: "idle",
-    shortcut: "⌥⇧L",
+    shortcuts: ["⌥⇧L", "⌥⇧P"],
     version: "0.1.0",
     sourceUrl: "https://source.example/lingo",
     ...handlers,
@@ -54,6 +56,32 @@ const open = (row: string) =>
   fireEvent.click(screen.getByRole("button", { name: new RegExp(row) }));
 const title = () => screen.getByRole("heading", { level: 1 }).textContent;
 
+describe("the row for the page in front", () => {
+  it("is not there when the panel stands on its own", () => {
+    renderPanel();
+    expect(screen.queryByText("Translate this page")).toBeNull();
+  });
+
+  it("offers to translate the page", () => {
+    const onToggle = vi.fn();
+    renderPanel({ page: { translating: false, onToggle } });
+
+    expect(screen.getByText("Translate this page")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Translate" }));
+    expect(onToggle).toHaveBeenCalledOnce();
+  });
+
+  it("offers the original while the page is translated", () => {
+    const onToggle = vi.fn();
+    renderPanel({ page: { translating: true, onToggle } });
+
+    expect(screen.getByText("Translating into 한국어")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Translate" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show original" }));
+    expect(onToggle).toHaveBeenCalledOnce();
+  });
+});
+
 describe("the main screen", () => {
   it("shows each setting with its current value", () => {
     renderPanel();
@@ -64,7 +92,9 @@ describe("the main screen", () => {
     expect(row("Translation engine")).toContain("Claude Opus 5.5");
     expect(row("Context")).toContain("On · 1,000 chars");
     expect(row("Translate into")).toContain("한국어");
-    expect(row("Keyboard shortcut")).toContain("⌥⇧L");
+    expect(row("Model")).toContain("Claude Haiku 5.5");
+    expect(row("Request rate")).toContain("3 per second");
+    expect(row("Keyboard shortcuts")).toContain("⌥⇧L · ⌥⇧P");
     expect(screen.getByText("Lingo 0.1.0")).toBeDefined();
   });
 
@@ -85,7 +115,7 @@ describe("the main screen", () => {
   it("shows that context is off, and that no shortcut is set", () => {
     renderPanel({
       settings: { ...settings, contextAwareness: false },
-      shortcut: "",
+      shortcuts: [],
     });
     expect(screen.getByText("Off")).toBeDefined();
     expect(screen.getByText("Not set")).toBeDefined();
@@ -384,5 +414,82 @@ describe("the context screen", () => {
     for (const radio of screen.getAllByRole("radio") as HTMLInputElement[]) {
       expect(radio.disabled).toBe(true);
     }
+  });
+});
+
+describe("the page model screen", () => {
+  it("offers the provider's models, with the fast one as the default", () => {
+    const { onSettingsChange } = renderPanel();
+    open("^Model");
+
+    expect(title()).toBe("Page model");
+    const fast = screen.getByRole("radio", { name: /Claude Haiku 5.5/ });
+    expect((fast as HTMLInputElement).checked).toBe(true);
+    expect(fast.closest("label")?.textContent).toContain("Default");
+
+    fireEvent.click(screen.getByRole("radio", { name: /Claude Opus 5.5/ }));
+    expect(onSettingsChange).toHaveBeenCalledWith({
+      ...settings,
+      pageModels: { anthropic: "claude-opus-5-5" },
+    });
+  });
+
+  it("keeps the model for pages apart from the one for lookups", () => {
+    renderPanel({
+      settings: {
+        ...settings,
+        models: { anthropic: "claude-opus-5-5" },
+        pageModels: { anthropic: "claude-haiku-5-5" },
+      },
+    });
+    const row = (name: string) =>
+      screen.getByRole("button", { name: new RegExp(name) }).textContent;
+    expect(row("Translation engine")).toContain("Claude Opus 5.5");
+    expect(row("^Model")).toContain("Claude Haiku 5.5");
+  });
+
+  it("follows the provider chosen under Translation engine", () => {
+    renderPanel({
+      settings: { ...settings, provider: "openai" },
+      apiKeys: { openai: "sk-stored" },
+    });
+    open("^Model");
+    expect(screen.getByRole("radio", { name: /GPT-6.2 Sol/ })).toBeDefined();
+    expect(screen.queryByRole("radio", { name: /Claude/ })).toBeNull();
+  });
+
+  it("takes any other model ID", () => {
+    const { onSettingsChange } = renderPanel();
+    open("^Model");
+    fireEvent.click(screen.getByRole("radio", { name: "Other…" }));
+    fireEvent.change(screen.getByLabelText("Model ID"), {
+      target: { value: "claude-next" },
+    });
+    expect(onSettingsChange).toHaveBeenLastCalledWith({
+      ...settings,
+      pageModels: { anthropic: "claude-next" },
+    });
+  });
+});
+
+describe("the request rate screen", () => {
+  it("offers the rates and stores the chosen one", () => {
+    const { onSettingsChange } = renderPanel();
+    open("Request rate");
+
+    expect(title()).toBe("Request rate");
+    const rates = screen
+      .getAllByRole("radio")
+      .map((radio) => radio.closest("label")?.textContent);
+    expect(rates).toEqual(["1", "2", "3Default", "5", "10"]);
+    expect(
+      (screen.getByRole("radio", { name: /^3/ }) as HTMLInputElement).checked,
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("radio", { name: "10" }));
+    expect(onSettingsChange).toHaveBeenCalledWith({
+      ...settings,
+      pageRequestsPerSecond: 10,
+    });
   });
 });

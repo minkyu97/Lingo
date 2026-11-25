@@ -1,20 +1,35 @@
 import { nativeLanguageName } from "@lingo/core";
-import { CodeXml, Keyboard, Languages, ScanText, Sparkles } from "lucide-react";
+import {
+  CodeXml,
+  FileText,
+  Gauge,
+  Keyboard,
+  Languages,
+  ScanText,
+  Sparkles,
+} from "lucide-react";
+import { ActionRow } from "./ActionRow.tsx";
 import { PanelHeader } from "./PanelHeader.tsx";
 import { SettingsRow } from "./SettingsRow.tsx";
 import type { SettingsPanelProps } from "./types.ts";
 
 /** The screens a row of the main screen can lead to. */
-export type DetailScreen = "engine" | "language" | "context";
+export type DetailScreen =
+  | "engine"
+  | "language"
+  | "context"
+  | "pageModel"
+  | "requestRate";
 
 /** The list of settings, each with its current value. */
 export function MainScreen({
   settings,
   providers,
   apiKeys,
-  shortcut,
+  shortcuts,
   version,
   sourceUrl,
+  page,
   onOpenShortcuts,
   onClose,
   onOpen,
@@ -24,6 +39,10 @@ export function MainScreen({
   // A model ID that was typed in by hand has no label, so it shows as it is.
   const modelLabel =
     provider.models.find(({ id }) => id === model)?.label ?? model;
+  const pageModel =
+    settings.pageModels[settings.provider] ?? provider.defaultPageModel;
+  const pageModelLabel =
+    provider.models.find(({ id }) => id === pageModel)?.label ?? pageModel;
   const hasKey = apiKeys[settings.provider] !== undefined;
   const context = settings.contextAwareness
     ? `On · ${settings.maxContextChars.toLocaleString("en-US")} chars`
@@ -33,6 +52,22 @@ export function MainScreen({
     <>
       <PanelHeader title="Settings" onClose={onClose} />
       <div className="lingo-settings__content">
+        {page && (
+          <>
+            <ActionRow
+              icon={FileText}
+              label={
+                page.translating
+                  ? `Translating into ${nativeLanguageName(settings.targetLanguage)}`
+                  : "Translate this page"
+              }
+              action={page.translating ? "Show original" : "Translate"}
+              emphasis={page.translating ? "secondary" : "primary"}
+              onAction={page.onToggle}
+            />
+            <hr className="lingo-divider" />
+          </>
+        )}
         <SettingsRow
           icon={Sparkles}
           label="Translation engine"
@@ -49,6 +84,20 @@ export function MainScreen({
           onClick={() => onOpen("context")}
         />
         <hr className="lingo-divider" />
+        <h2 className="lingo-group-label">Pages</h2>
+        <SettingsRow
+          icon={Sparkles}
+          label="Model"
+          value={pageModelLabel}
+          onClick={() => onOpen("pageModel")}
+        />
+        <SettingsRow
+          icon={Gauge}
+          label="Request rate"
+          value={`${settings.pageRequestsPerSecond} per second`}
+          onClick={() => onOpen("requestRate")}
+        />
+        <hr className="lingo-divider" />
         <h2 className="lingo-group-label">General</h2>
         <SettingsRow
           icon={Languages}
@@ -58,8 +107,8 @@ export function MainScreen({
         />
         <SettingsRow
           icon={Keyboard}
-          label="Keyboard shortcut"
-          value={shortcut || "Not set"}
+          label="Keyboard shortcuts"
+          value={shortcuts.join(" · ") || "Not set"}
           external
           onClick={onOpenShortcuts}
         />

@@ -7,6 +7,10 @@ import {
 import { browser } from "wxt/browser";
 import { storage } from "wxt/utils/storage";
 import type { z } from "zod";
+import {
+  type PageTranslationOptions,
+  pageTranslationOptionsSchema,
+} from "./page-translation/protocol.ts";
 
 /** One API key per provider, for the providers that have one. */
 export type ApiKeys = z.infer<typeof perProviderTextSchema>;
@@ -15,6 +19,9 @@ export type ApiKeys = z.infer<typeof perProviderTextSchema>;
 const storedApiKeys = perProviderTextSchema.catch({});
 
 const settingsItem = storage.defineItem<unknown>("local:settings");
+const pageTranslationItem = storage.defineItem<unknown>(
+  "local:pageTranslation",
+);
 const apiKeysItem = storage.defineItem<unknown>("local:apiKeys");
 
 /** Reads the settings, falling back to defaults for anything missing or invalid. */
@@ -24,6 +31,13 @@ export async function loadSettings(): Promise<Settings> {
 
 export async function saveSettings(settings: Settings): Promise<void> {
   await settingsItem.setValue(settings);
+}
+
+/** Reads how page translation behaves, with defaults for what is not set. */
+export async function loadPageTranslationOptions(): Promise<PageTranslationOptions> {
+  return pageTranslationOptionsSchema.parse(
+    (await pageTranslationItem.getValue()) ?? {},
+  );
 }
 
 export async function loadApiKeys(): Promise<ApiKeys> {

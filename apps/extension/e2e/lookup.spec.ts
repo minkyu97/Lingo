@@ -114,7 +114,9 @@ test("uses OpenAI when it is the chosen provider", async ({
     apiKey: "test-key",
     language: "Japanese",
   });
-  await expect(settings.getByText("GPT-6.2 Sol")).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: /^Translation engine/ }),
+  ).toContainText("GPT-6.2 Sol");
   await expect(settings.getByText("日本語")).toBeVisible();
   await settings.screenshot({ path: testInfo.outputPath("settings.png") });
   const page = await openPageAndSelect(context, "bank");
