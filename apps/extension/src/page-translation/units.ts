@@ -272,6 +272,19 @@ export function containersOf(unit: Unit): Container[] {
   return containers;
 }
 
+/** The stretch of the page that the unit's text takes up, as it is now. */
+export function rangeOf(unit: Unit): Range | undefined {
+  const { parent, current } = unit.root;
+  const inPlace = current.filter((node) => node.parentNode === parent);
+  const first = inPlace[0];
+  const last = inPlace.at(-1);
+  if (!first || !last) return undefined;
+  const range = new Range();
+  range.setStartBefore(first);
+  range.setEndAfter(last);
+  return range;
+}
+
 function preservesWhitespace(parent: Node): boolean {
   const element = isElement(parent) ? parent : (parent as ShadowRoot).host;
   const style = getComputedStyle(element);

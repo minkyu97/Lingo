@@ -30,6 +30,11 @@ export {
   type LookupStatus,
 } from "./lookup/LookupCard.tsx";
 export { LookupTrigger } from "./lookup/LookupTrigger.tsx";
+export {
+  PLACEHOLDER_STEP_MS,
+  PLACEHOLDER_STEPS,
+  placeholderColor,
+} from "./page/placeholder.ts";
 export { SettingsPanel } from "./settings/SettingsPanel.tsx";
 export type {
   KeyStatus,

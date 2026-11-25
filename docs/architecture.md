@@ -216,6 +216,7 @@ A request holds several segments in page order, and the page's title for referen
 | `src/controls/` | Button, text button, icon button, segmented control, switch, badge, callout, text field, search field, messages                               |
 | `src/lookup/`   | `LookupCard`, `DictionaryEntryView`, and `LookupTrigger`                                                                                      |
 | `src/settings/` | `SettingsPanel`: a list of settings and a screen for each one that needs more than a row                                                      |
+| `src/page/`     | What page translation shows in a page. So far the tones and the timing of the text placeholder                                                |
 | `src/Logo.tsx`  | The logo, an apple, with and without a face                                                                                                   |
 
 - **Tokens.** Every component tree starts at an element with the class `lingo`, which sets the tokens. Their names and values mirror the variables of the Lingo design file, so a design and its implementation use the same words.
@@ -286,9 +287,9 @@ Local servers may need origin configuration before they accept requests from an 
 
 ### Browser extension
 
-Implemented: translate or define the selection, through an in-page floating button or a keyboard shortcut, in a popup that can be moved and pinned; settings that open in a panel inside the page; and page translation, from a keyboard shortcut.
+Implemented: translate or define the selection, through an in-page floating button or a keyboard shortcut, in a popup that can be moved and pinned; settings that open in a panel inside the page; and page translation, from a keyboard shortcut, with paragraphs shown as gray bars while they wait for their translation.
 
-In progress: the interface of page translation. It is designed and not built yet: a mark on paragraphs that are being translated, a control in the page and in the panel, and a setting for the request rate.
+In progress: the rest of the interface of page translation. It is designed and not built yet: a control in the page and in the panel, and settings for the model and the request rate.
 
 Planned: chat refinement, Safari.
 
@@ -345,6 +346,7 @@ Where things are in `apps/extension`:
 | `src/page-translation/units.ts`               | Splitting a page into units, and writing each unit as text with inline tags                                                                                         |
 | `src/page-translation/rewrite.ts`             | Writing a translation into the page's own nodes, and putting the original back                                                                                      |
 | `src/page-translation/translator.ts`          | The content-script side of page translation: what is near the viewport, the queue, following the page as it changes, and turning off                                |
+| `src/page-translation/placeholders.ts`        | The gray bars over text that is waiting for its translation                                                                                                         |
 | `src/page-translation/handler.ts`             | The background side: permits at the configured rate from `rate-limiter.ts`, and the stream of translated segments                                                   |
 | `src/page-translation/protocol.ts`            | The messages of the page translation port, the options, and their validation                                                                                        |
 | `src/stores.ts`                               | Settings and key storage                                                                                                                                            |
@@ -365,6 +367,7 @@ Design points of page translation:
 
 - **The page's own nodes.** A translation is written into the text nodes the page already has, and the page's inline elements are moved to follow the new word order. No node of the page is removed or given another parent. So every style, link, and event listener stays, and the page's own scripts find their nodes where they left them, which matters on a site built with a framework. Elements are moved with `moveBefore` where the browser has it, which does not reset them. The translator's own changes do not count as changes of the page: it throws away the mutation records of what it wrote.
 - **Tags that do not fit.** A model does not always return the tags it was given. A tag that the segment did not have, a tag used twice, or a tag inside the wrong tag is taken off, and its words stay. A translation that lacks a tag cannot be mended, because there is no telling where that element belongs. The unit is then sent once more, in a request of its own. If the second answer lacks a tag too, it is used all the same: the paragraph shows translated, and an element whose tag is missing stays in the page after the text, a link or bold text without its words, kept text or an image as it is.
+- **Text that is waiting.** A paragraph shows as gray bars from the moment it is queued until its translation is written, so the reader sees what is on its way. The bars are CSS custom highlights (`placeholders.ts`): the browser paints them on the text itself, one bar per line and exactly as wide, and they scroll, clip, and stack as the text does. Nothing is added to the page's elements; the rules go in through `adoptedStyleSheets`. A highlight cannot be animated, so the pulse is made by moving each group of text from one color to the next every 170 ms, with neighbouring paragraphs a step apart. The bars have square corners and one flat color for the same reason. With reduced motion they hold still.
 - **Looking ahead.** The observer's margin is set as `scrollMargin`, in pixels. That widens the viewport and every scrolling box inside the page alike. A `rootMargin` on top of it would count twice for the page itself: an end-to-end test caught text five screens away being translated.
 - **Coming back after the worker stops.** The browser stops an idle service worker, which closes the port. The content script then opens a new port and sends again what was in progress. After three closings in a row it gives up.
 - **A page that never rests.** An element whose text the page rewrites again and again is read at most eight more times, and then left alone. Without that, a clock or a counter would be translated without end.

@@ -23,6 +23,9 @@
   --lingo-danger: #cf222e;
   --lingo-success: #1a7f37;
   --lingo-knob: #ffffff;
+  /* The two ends of the pulse of a text placeholder. The same on any page. */
+  --lingo-placeholder: rgb(128 128 128 / 0.14);
+  --lingo-placeholder-strong: rgb(128 128 128 / 0.24);
 
   /* Space */
   --lingo-space-2: 2px;

@@ -13,6 +13,8 @@
  * - `GET /page` is the page the tests select text on. `GET /strict-page` is
  *   the same page under a content security policy that forbids frames.
  *   `GET /long-page` is a page many screens long, for page translation.
+ *   `GET /slow-page` is the same page under another title. Translations of
+ *   it take a second and a half, long enough to see text waiting for one.
  * - `GET /requests` returns every request body received so far and when it
  *   came in, so a test can check what the extension sent. `DELETE /requests`
  *   clears the list.
@@ -37,6 +39,8 @@ const PAGE = `<!doctype html>
 </html>`;
 
 const FILLER_PARAGRAPHS = 60;
+const LONG_TITLE = "<title>A long page</title>";
+const SLOW_TITLE = "<title>A slow page</title>";
 
 /**
  * A page many screens long. It has text in several styles, a link, code, a
@@ -46,7 +50,7 @@ const LONG_PAGE = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>A long page</title>
+    ${LONG_TITLE}
     <style>
       body { font: 16px/1.5 sans-serif; margin: 40px; }
       .filler p { height: 120px; margin: 0 0 20px; }
@@ -299,6 +303,13 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "GET" && path === "/slow-page") {
+    response
+      .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end(LONG_PAGE.replace(LONG_TITLE, SLOW_TITLE));
+    return;
+  }
+
   // The same page, from a site that allows no frames and no outside content.
   if (request.method === "GET" && path === "/strict-page") {
     response
@@ -350,6 +361,7 @@ const server = createServer(async (request, response) => {
     // Send one event at a time, so the extension sees a real stream.
     const message = userMessage(body);
     if (path === "/v1/messages" && message.includes("<seg id=")) {
+      if (message.includes(SLOW_TITLE)) await sleep(1500);
       for (const part of pageTranslationStream(message)) {
         response.write(part);
         await sleep(2);

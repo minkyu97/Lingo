@@ -56,11 +56,34 @@ async function toggleTranslation(worker: Worker) {
   });
 }
 
-async function openLongPage(context: BrowserContext, worker: Worker) {
-  const page = await openTestPage(context, "/long-page");
+async function openLongPage(
+  context: BrowserContext,
+  worker: Worker,
+  path = "/long-page",
+) {
+  const page = await openTestPage(context, path);
   await waitUntilListening(page, worker);
   return page;
 }
+
+/**
+ * The gray bars over text that is waiting for its translation: how many
+ * stretches of text they cover, and whether they cover the given element.
+ */
+const placeholders = (page: Page, selector: string) =>
+  page.evaluate((target) => {
+    const element = document.querySelector(target);
+    const ranges = [...CSS.highlights]
+      .filter(([name]) => name.startsWith("lingo-placeholder-"))
+      .flatMap(([, highlight]) => [...highlight] as Range[]);
+    return {
+      stretches: ranges.length,
+      covers:
+        element !== null &&
+        ranges.some((range) => range.intersectsNode(element)),
+      styleSheets: document.adoptedStyleSheets.length,
+    };
+  }, selector);
 
 const progress = (page: Page): Promise<Progress | undefined> =>
   page.evaluate(() => {
@@ -214,6 +237,35 @@ test("keeps styles, links, and listeners, and leaves code alone", async ({
   );
   expect(await text(page, "#broken b")).toBe("");
   expect(await progress(page)).toMatchObject({ lossy: 1, failed: 0 });
+});
+
+test("shows gray bars over text that is waiting for its translation", async ({
+  context,
+  worker,
+}, testInfo) => {
+  await configure(worker);
+  const page = await openLongPage(context, worker, "/slow-page");
+  expect(await placeholders(page, "#p1")).toMatchObject({ stretches: 0 });
+
+  await toggleTranslation(worker);
+
+  // What is near the viewport is covered, and what is far away is not.
+  await expect
+    .poll(async () => (await placeholders(page, "#p1")).covers)
+    .toBe(true);
+  expect((await placeholders(page, "#p60")).covers).toBe(false);
+  expect((await placeholders(page, "#code")).covers).toBe(false);
+  expect(await text(page, "#p1")).toBe("Paragraph 1 of the long page.");
+  await page.screenshot({ path: testInfo.outputPath("waiting.png") });
+
+  // The bars go as the translations come, and leave nothing behind.
+  await expect(page.locator("#p1")).toHaveText("PARAGRAPH 1 OF THE LONG PAGE.");
+  await expectSettled(page);
+  expect(await placeholders(page, "#p1")).toEqual({
+    stretches: 0,
+    covers: false,
+    styleSheets: 0,
+  });
 });
 
 test("sends no more requests per second than the settings allow", async ({

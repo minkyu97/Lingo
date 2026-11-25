@@ -4,11 +4,13 @@ import { browser } from "wxt/browser";
 import { createShadowRootUi } from "wxt/utils/content-script-ui/shadow-root";
 import { defineContentScript } from "wxt/utils/define-content-script";
 import { isRuntimeMessage } from "../../src/messaging.ts";
+import { createPlaceholders } from "../../src/page-translation/placeholders.ts";
 import { PAGE_TRANSLATION_PORT } from "../../src/page-translation/protocol.ts";
 import {
   createPageTranslator,
   type PageTranslationProgress,
 } from "../../src/page-translation/translator.ts";
+import { rangeOf } from "../../src/page-translation/units.ts";
 import { LookupApp } from "./App.tsx";
 import { SettingsDrawer } from "./SettingsDrawer.tsx";
 
@@ -36,8 +38,15 @@ export default defineContentScript({
 
     // Page translation is turned on and off with its keyboard shortcut. Each
     // frame translates its own text.
+    const placeholders = createPlaceholders();
     const translator = createPageTranslator({
       connect: () => browser.runtime.connect({ name: PAGE_TRANSLATION_PORT }),
+      // Text that is waiting for its translation shows as pulsing gray bars.
+      onPending(unit, pending) {
+        const range = pending ? rangeOf(unit) : undefined;
+        if (range) placeholders.show(unit, range);
+        else placeholders.hide(unit);
+      },
       onProgress: E2E ? publishProgress : undefined,
     });
     browser.runtime.onMessage.addListener((message) => {
