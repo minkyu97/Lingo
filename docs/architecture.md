@@ -256,7 +256,7 @@ A user sets up engines, and chooses one for each task. `packages/core/src/engine
 
 - **An engine** is a provider, one of its models, and an API key, under a name. It can also carry extra request parameters. A user adds as many as they like, also several of one provider.
 - **A task** is one of the things Lingo does with a model: translating a selection, defining a word or phrase, and translating a page. Each has an engine of its own, and they need not share a provider. A task for which none is chosen uses the first engine, so the first engine that is added does everything.
-- **Keys are stored apart from engines**, by engine ID, so that the settings can go where a key must not. A new engine of a provider that already has one starts with that engine's key filled in.
+- **Keys are stored apart from engines**, by engine ID, so that the settings can go where a key must not. A new engine starts without a key, also when its provider has another engine: no key is put in for the user that they did not ask for. Duplicating an engine is the way to carry a key over.
 - **The model list comes from the key.** The settings ask the provider which models the key can use, and offer those, newest first. Lingo keeps no list of its own to fall behind. A model ID can also be typed by hand.
 - **What a model accepts** is stored with the engine when the model is picked from the list, where the provider says it. See the adapters below for how it is used.
 - **Removing an engine** hands its tasks to the first engine that is left.

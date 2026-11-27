@@ -520,14 +520,13 @@ test("uses the engine chosen for pages, and the request rate from the settings",
   await expect(row(/^Request rate/)).toContainText("3 per second");
   await expect(row(/^Keyboard shortcuts/)).toBeVisible();
 
-  // A second engine, of the same provider, gets the first one's key.
+  // A second engine starts without a key, also for a provider that has one.
   await row(/^Translation engines/).click();
   await panel.getByRole("button", { name: "Add engine" }).click();
-  await expect(panel.getByLabel("API key")).toHaveValue("test-key");
-  await expect(panel.getByText(/filled in for you/)).toBeVisible();
+  await expect(panel.getByLabel("API key")).toHaveValue("");
   await page.screenshot({ path: testInfo.outputPath("add-engine.png") });
-  await panel.getByRole("radio", { name: "Claude Sonnet 5.5" }).check();
-  await panel.getByRole("button", { name: "Add engine" }).click();
+  await panel.getByRole("button", { name: "Back" }).click();
+  await addEngine(panel, { apiKey: "test-key", model: "Claude Sonnet 5.5" });
 
   // Every task starts on the first engine. Pages get the new one.
   await expect(row(/^Page translation/)).toContainText("claude-opus-5-5");

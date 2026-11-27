@@ -330,6 +330,7 @@ describe("duplicating an engine", () => {
 
     expect(title()).toBe("Add engine");
     expect(keyField().value).toBe("key-a");
+    await screen.findByText("The same key as Pages.");
     await waitFor(() => expect(checked("Claude Sonnet 5.5")).toBe(true));
     expect(
       (screen.getByLabelText("Extra parameters") as HTMLTextAreaElement).value,
@@ -359,6 +360,13 @@ describe("adding an engine", () => {
     const panel = renderPanel(props);
     open("^Translation engines");
     fireEvent.click(screen.getByRole("button", { name: "Add engine" }));
+    return panel;
+  }
+  /** The form with a key that its provider has accepted, and so its models. */
+  async function openFormWithKey(props: Partial<SettingsPanelProps> = {}) {
+    const panel = openForm(props);
+    enterKey("key-new");
+    await screen.findByText("Anthropic accepted this key.");
     return panel;
   }
   const fresh = { settings: { ...settings, engines: [], engineFor: {} } };
@@ -424,22 +432,27 @@ describe("adding an engine", () => {
     expect(title()).toBe("Translation engines");
   });
 
-  it("fills in the key of another engine of the same provider", async () => {
+  it("starts without a key, whatever engines there are already", () => {
     const { onCheckKey } = openForm();
 
-    expect(keyField().value).toBe("key-a");
-    expect(onCheckKey).toHaveBeenCalledWith("anthropic", "key-a");
-    await screen.findByText("The key of Claude Fable 5.2, filled in for you.");
+    expect(keyField().value).toBe("");
+    expect(onCheckKey).not.toHaveBeenCalled();
+    expect(radios()).toEqual(["Other…"]);
 
-    // Each provider has its own.
     fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
-    expect(keyField().value).toBe("key-o");
-    expect(onCheckKey).toHaveBeenLastCalledWith("openai", "key-o");
+    expect(keyField().value).toBe("");
+    expect(onCheckKey).not.toHaveBeenCalled();
+  });
+
+  it("forgets the key when the provider is changed", async () => {
+    await openFormWithKey();
+    fireEvent.click(screen.getByRole("button", { name: "OpenAI" }));
+    expect(keyField().value).toBe("");
+    expect(radios()).toEqual(["Other…"]);
   });
 
   it("takes a model ID typed by hand", async () => {
-    const { onEngineSave } = openForm();
-    await screen.findByText(/filled in for you/);
+    const { onEngineSave } = await openFormWithKey();
     fireEvent.click(screen.getByRole("radio", { name: "Other…" }));
     expect(addButton().disabled).toBe(true);
 
@@ -509,8 +522,7 @@ describe("adding an engine", () => {
   });
 
   it("refuses extra parameters that are not a JSON object", async () => {
-    openForm();
-    await screen.findByText(/filled in for you/);
+    await openFormWithKey();
     fireEvent.click(screen.getByRole("radio", { name: "Claude Haiku 5.5" }));
     expect(addButton().disabled).toBe(false);
 
@@ -534,14 +546,14 @@ describe("adding an engine", () => {
       })),
     };
     openForm({ onCheckKey: async () => many });
+    enterKey("key-new");
     const search = await screen.findByLabelText("Search models");
     fireEvent.change(search, { target: { value: "gpt-11" } });
     expect(radios()).toEqual(["gpt-11", "Other…"]);
   });
 
   it("keeps a short list free of a search field", async () => {
-    openForm();
-    await screen.findByText(/filled in for you/);
+    await openFormWithKey();
     expect(screen.queryByLabelText("Search models")).toBeNull();
   });
 });

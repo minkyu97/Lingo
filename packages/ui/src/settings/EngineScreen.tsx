@@ -106,23 +106,13 @@ export function EngineScreen({
   const storedKey = stored ? (engineKeys[stored.id] ?? "") : "";
   const [id] = useState(() => stored?.id ?? crypto.randomUUID());
 
-  /** Another engine of the provider, whose key a new engine can start with. */
-  const lender = (provider: ProviderId) =>
-    settings.engines.find(
-      (engine) =>
-        engine.provider === provider &&
-        engine.id !== id &&
-        engineKeys[engine.id],
-    );
-
   const [provider, setProvider] = useState<ProviderId>(
     start?.provider ?? "anthropic",
   );
-  const [key, setKey] = useState(() => {
-    if (stored) return storedKey;
-    const from = original ?? lender(provider);
-    return from ? (engineKeys[from.id] ?? "") : "";
-  });
+  // A new engine starts without a key, unless it is a copy: no key is put
+  // in for the user that they did not ask for.
+  const copiedKey = original ? (engineKeys[original.id] ?? "") : "";
+  const [key, setKey] = useState(stored ? storedKey : copiedKey);
   const [revealed, setRevealed] = useState(false);
   const [check, setCheck] = useState<Check>(NOT_CHECKED);
   /** The key that `check` is about. */
@@ -174,15 +164,14 @@ export function EngineScreen({
   }, []);
 
   const changeProvider = (next: ProviderId) => {
-    const from = lender(next);
-    const lent = from ? (engineKeys[from.id] ?? "") : "";
+    // A key belongs to one provider, so the field starts over.
     setProvider(next);
-    setKey(lent);
+    setKey("");
     setModel(undefined);
     setOther(false);
     setTyped("");
     setQuery("");
-    void runCheck(next, lent);
+    void runCheck(next, "");
   };
 
   const submitKey = () => {
@@ -294,9 +283,12 @@ export function EngineScreen({
             status={check.status}
             providerName={providerName}
             keysUrl={providers[provider].keysUrl}
-            lentBy={
-              !stored && trimmedKey !== "" && trimmedKey === checkedKey
-                ? lenderName()
+            copiedFrom={
+              original &&
+              provider === original.provider &&
+              trimmedKey !== "" &&
+              trimmedKey === copiedKey
+                ? engineName(original)
                 : undefined
             }
             isStoredKey={stored !== undefined && trimmedKey === storedKey}
@@ -438,13 +430,6 @@ export function EngineScreen({
       </div>
     </>
   );
-
-  function lenderName(): string | undefined {
-    const from = lender(provider);
-    return from && engineKeys[from.id] === trimmedKey
-      ? engineName(from)
-      : undefined;
-  }
 }
 
 const modelTyped = (text: string): Model => ({
@@ -461,8 +446,8 @@ interface KeyMessageProps {
   status: Check["status"];
   providerName: string;
   keysUrl: string;
-  /** The engine whose key was filled in, when the key is that one. */
-  lentBy: string | undefined;
+  /** The engine this one is a copy of, while it still has that one's key. */
+  copiedFrom: string | undefined;
   /** Whether the key in the field is the one this engine has stored. */
   isStoredKey: boolean;
   onRetry: () => void;
@@ -473,7 +458,7 @@ function KeyMessage({
   status,
   providerName,
   keysUrl,
-  lentBy,
+  copiedFrom,
   isStoredKey,
   onRetry,
 }: KeyMessageProps) {
@@ -497,8 +482,8 @@ function KeyMessage({
       </FieldMessage>
     );
   }
-  if (status === "accepted" && lentBy) {
-    return <FieldMessage>The key of {lentBy}, filled in for you.</FieldMessage>;
+  if (status === "accepted" && copiedFrom) {
+    return <FieldMessage>The same key as {copiedFrom}.</FieldMessage>;
   }
   if (status === "accepted" && !isStoredKey) {
     return (
