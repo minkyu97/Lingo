@@ -6,7 +6,7 @@ import {
   PROVIDER_IDS,
   type ProviderId,
 } from "@lingo/core";
-import { Eye, EyeOff, Trash } from "lucide-react";
+import { Copy, Eye, EyeOff, Trash } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../controls/Button.tsx";
 import { FieldMessage } from "../controls/FieldMessage.tsx";
@@ -69,14 +69,25 @@ const sameEngine = (a: Engine, b: Engine) =>
     b.parameters,
   ]);
 
+export interface EngineScreenProps extends DetailScreenProps {
+  /** The engine to show. Without it, the screen adds an engine. */
+  engineId?: string;
+  /** An engine that a new one starts as a copy of. */
+  copyOf?: string;
+  /** Called to add an engine like the one with this ID. */
+  onDuplicate: (engineId: string) => void;
+}
+
 /**
  * One engine: its provider, API key, model, name, and extra parameters.
  * Without an `engineId` it is the form that adds an engine, which exists
- * once "Add engine" is pressed. An engine that exists is stored again each
+ * once "Add engine" is pressed. It can start as a copy of another engine. An engine that exists is stored again each
  * time it changes, as long as what is in the form is complete.
  */
 export function EngineScreen({
   engineId,
+  copyOf,
+  onDuplicate,
   settings,
   providers,
   engineKeys,
@@ -85,8 +96,13 @@ export function EngineScreen({
   onEngineRemove,
   onBack,
   onClose,
-}: DetailScreenProps & { engineId?: string }) {
+}: EngineScreenProps) {
   const stored = settings.engines.find((engine) => engine.id === engineId);
+  /** What a new engine starts as: a copy of this one, apart from its name. */
+  const original = stored
+    ? undefined
+    : settings.engines.find((engine) => engine.id === copyOf);
+  const start = stored ?? original;
   const storedKey = stored ? (engineKeys[stored.id] ?? "") : "";
   const [id] = useState(() => stored?.id ?? crypto.randomUUID());
 
@@ -100,21 +116,22 @@ export function EngineScreen({
     );
 
   const [provider, setProvider] = useState<ProviderId>(
-    stored?.provider ?? "anthropic",
+    start?.provider ?? "anthropic",
   );
   const [key, setKey] = useState(() => {
-    const from = stored ? undefined : lender(provider);
-    return stored ? storedKey : from ? (engineKeys[from.id] ?? "") : "";
+    if (stored) return storedKey;
+    const from = original ?? lender(provider);
+    return from ? (engineKeys[from.id] ?? "") : "";
   });
   const [revealed, setRevealed] = useState(false);
   const [check, setCheck] = useState<Check>(NOT_CHECKED);
   /** The key that `check` is about. */
   const [checkedKey, setCheckedKey] = useState("");
   const [model, setModel] = useState<Model | undefined>(
-    stored && {
-      id: stored.model,
-      label: stored.modelLabel ?? stored.model,
-      capabilities: stored.capabilities,
+    start && {
+      id: start.model,
+      label: start.modelLabel ?? start.model,
+      capabilities: start.capabilities,
     },
   );
   const [other, setOther] = useState(false);
@@ -122,7 +139,7 @@ export function EngineScreen({
   const [query, setQuery] = useState("");
   const [name, setName] = useState(stored?.name ?? "");
   const [parameters, setParameters] = useState(
-    stored?.parameters ? JSON.stringify(stored.parameters, null, 2) : "",
+    start?.parameters ? JSON.stringify(start.parameters, null, 2) : "",
   );
   /** Counts checks, so that only the latest one reports back. */
   const latestCheck = useRef(0);
@@ -212,7 +229,7 @@ export function EngineScreen({
   // Until the list is in, an engine shows the one model it has.
   const models: Model[] = listed
     ? check.models
-    : model && !other && stored
+    : model && !other
       ? [model]
       : [];
   const matching = models.filter(({ id, label }) =>
@@ -384,7 +401,13 @@ export function EngineScreen({
                 : "Not used for any task. "}
               Changes are stored as you make them.
             </p>
-            <div className="lingo-settings__field">
+            <div className="lingo-settings__field lingo-settings__field--buttons">
+              <TextButton
+                leadingIcon={Copy}
+                onClick={() => onDuplicate(stored.id)}
+              >
+                Duplicate
+              </TextButton>
               <TextButton
                 className="lingo-text-button lingo-text-button--danger"
                 leadingIcon={Trash}

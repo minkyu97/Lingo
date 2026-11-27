@@ -1,8 +1,9 @@
 import type { EngineTask } from "@lingo/core";
-import { engineForTask, engineName } from "@lingo/core";
-import { Plus, Sparkles } from "lucide-react";
+import { engineForTask, engineName, moveEngine } from "@lingo/core";
+import { Plus } from "lucide-react";
 import { Button } from "../controls/Button.tsx";
 import { Callout } from "../controls/Callout.tsx";
+import { EngineList } from "./EngineList.tsx";
 import { PanelHeader } from "./PanelHeader.tsx";
 import { SettingsRow } from "./SettingsRow.tsx";
 import { TASKS } from "./tasks.ts";
@@ -18,6 +19,7 @@ export interface EnginesScreenProps extends DetailScreenProps {
 export function EnginesScreen({
   settings,
   providers,
+  onSettingsChange,
   onOpenTask,
   onOpenEngine,
   onAdd,
@@ -81,15 +83,17 @@ export function EnginesScreen({
         })}
         <hr className="lingo-divider" />
         <h2 className="lingo-group-label">Engines</h2>
-        {settings.engines.map((engine) => (
-          <SettingsRow
-            key={engine.id}
-            icon={Sparkles}
-            label={engineName(engine)}
-            value={providers[engine.provider].label}
-            onClick={() => onOpenEngine(engine.id)}
-          />
-        ))}
+        <EngineList
+          engines={settings.engines.map((engine) => ({
+            id: engine.id,
+            name: engineName(engine),
+            provider: providers[engine.provider].label,
+          }))}
+          onOpen={onOpenEngine}
+          onMove={(id, toIndex) =>
+            onSettingsChange(moveEngine(settings, id, toIndex))
+          }
+        />
         <SettingsRow icon={Plus} label="Add engine" plain onClick={onAdd} />
         <hr className="lingo-divider" />
         {note}

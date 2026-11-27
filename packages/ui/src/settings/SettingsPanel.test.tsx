@@ -243,6 +243,117 @@ describe("the translation engines screen", () => {
   });
 });
 
+describe("the order of the engines", () => {
+  const handle = (name: string) =>
+    screen.getByRole("button", { name: `Move ${name}` });
+  const order = (call: unknown) =>
+    (call as Settings).engines.map((engine) => engine.id);
+
+  it("moves an engine with the arrow keys on its handle", () => {
+    const { onSettingsChange } = renderPanel();
+    open("^Translation engines");
+
+    fireEvent.keyDown(handle("Pages"), { key: "ArrowUp" });
+    expect(order(onSettingsChange.mock.lastCall?.[0])).toEqual([
+      "sol",
+      "sonnet",
+      "fable",
+    ]);
+    expect(screen.getByRole("status").textContent).toBe("Pages is now 2 of 3.");
+
+    fireEvent.keyDown(handle("gpt-6.2-sol"), { key: "ArrowDown" });
+    expect(order(onSettingsChange.mock.lastCall?.[0])).toEqual([
+      "fable",
+      "sol",
+      "sonnet",
+    ]);
+  });
+
+  it("does not move an engine past either end", () => {
+    const { onSettingsChange } = renderPanel();
+    open("^Translation engines");
+    fireEvent.keyDown(handle("gpt-6.2-sol"), { key: "ArrowUp" });
+    fireEvent.keyDown(handle("Pages"), { key: "ArrowDown" });
+    fireEvent.keyDown(handle("Pages"), { key: "Enter" });
+    expect(onSettingsChange).not.toHaveBeenCalled();
+  });
+
+  it("moves an engine to where its handle is dragged", () => {
+    const { onSettingsChange } = renderPanel();
+    open("^Translation engines");
+
+    // Rows are 48px tall: two rows up, and a little more.
+    fireEvent.pointerDown(handle("Pages"), { clientY: 300 });
+    fireEvent.pointerMove(handle("Pages"), { clientY: 195 });
+    expect(document.querySelector(".lingo-engine-list__lifted")).not.toBeNull();
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    fireEvent.pointerUp(handle("Pages"), { clientY: 195 });
+
+    expect(order(onSettingsChange.mock.lastCall?.[0])).toEqual([
+      "sonnet",
+      "sol",
+      "fable",
+    ]);
+    expect(document.querySelector(".lingo-engine-list__lifted")).toBeNull();
+  });
+
+  it("leaves the order alone when the handle is let go where it was", () => {
+    const { onSettingsChange } = renderPanel();
+    open("^Translation engines");
+    fireEvent.pointerDown(handle("Pages"), { clientY: 300 });
+    fireEvent.pointerMove(handle("Pages"), { clientY: 310 });
+    fireEvent.pointerUp(handle("Pages"), { clientY: 310 });
+    expect(onSettingsChange).not.toHaveBeenCalled();
+  });
+
+  it("still opens an engine from its row", () => {
+    renderPanel();
+    open("^Translation engines");
+    open("^Pages");
+    expect(title()).toBe("Pages");
+  });
+});
+
+describe("duplicating an engine", () => {
+  it("opens the form for a new engine, filled in from the old one", async () => {
+    const custom: Engine = {
+      ...sonnet,
+      parameters: { temperature: 0.3 },
+    };
+    const { onEngineSave } = renderPanel({
+      settings: { ...settings, engines: [sol, fable, custom] },
+    });
+    open("^Translation engines");
+    open("^Pages");
+    await waitFor(() => expect(keyField().disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    expect(title()).toBe("Add engine");
+    expect(keyField().value).toBe("key-a");
+    await waitFor(() => expect(checked("Claude Sonnet 5.5")).toBe(true));
+    expect(
+      (screen.getByLabelText("Extra parameters") as HTMLTextAreaElement).value,
+    ).toContain('"temperature": 0.3');
+    // The name is the one thing that is not copied.
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("");
+    // Nothing is added until it is asked for.
+    expect(onEngineSave).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Claude Haiku 5.5" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add engine" }));
+
+    const [engine, key] = onEngineSave.mock.calls[0] ?? [];
+    expect(engine).toMatchObject({
+      provider: "anthropic",
+      model: "claude-haiku-5-5",
+      name: undefined,
+      parameters: { temperature: 0.3 },
+    });
+    expect(engine?.id).not.toBe("sonnet");
+    expect(key).toBe("key-a");
+  });
+});
+
 describe("adding an engine", () => {
   function openForm(props: Partial<SettingsPanelProps> = {}) {
     const panel = renderPanel(props);

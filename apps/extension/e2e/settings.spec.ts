@@ -330,3 +330,85 @@ test("keeps what was set up before there were engines", async ({
   await row(/^Claude Haiku 5.5/).click();
   await expect(settings.getByLabel("API key")).toHaveValue("test-key");
 });
+
+test("duplicates an engine, and drags engines into another order", async ({
+  context,
+  worker,
+  extensionId,
+}, testInfo) => {
+  await worker.evaluate(async () => {
+    const { storage } = (
+      globalThis as unknown as {
+        chrome: { storage: { local: { set(items: object): Promise<void> } } };
+      }
+    ).chrome;
+    await storage.local.set({
+      settings: {
+        engines: [
+          {
+            id: "opus",
+            provider: "anthropic",
+            model: "claude-opus-5-5",
+            modelLabel: "Claude Opus 5.5",
+            parameters: { temperature: 0.3 },
+          },
+        ],
+      },
+      engineKeys: { opus: "test-key" },
+    });
+  });
+  const settings = await context.newPage();
+  await settings.goto(`chrome-extension://${extensionId}/options.html`);
+  await settings.getByRole("button", { name: /^Translation engines/ }).click();
+  const names = () =>
+    settings.locator(".lingo-engine-row .lingo-settings-row__label");
+
+  // A copy starts with the key, the model, and the parameters of the original.
+  await settings.getByRole("button", { name: /^Claude Opus 5.5/ }).click();
+  await settings.getByRole("button", { name: "Duplicate" }).click();
+  await expect(settings.getByRole("heading", { level: 1 })).toHaveText(
+    "Add engine",
+  );
+  await expect(settings.getByLabel("API key")).toHaveValue("test-key");
+  await expect(settings.getByLabel("Extra parameters")).toHaveValue(
+    /"temperature": 0.3/,
+  );
+  await expect(
+    settings.getByRole("radio", { name: "Claude Opus 5.5" }),
+  ).toBeChecked();
+  await settings.getByRole("radio", { name: "Claude Haiku 5.5" }).check();
+  await settings.getByRole("button", { name: "Add engine" }).click();
+  await expect(names()).toHaveText(["Claude Opus 5.5", "Claude Haiku 5.5"]);
+
+  // Dragging the second engine's handle above the first puts it first.
+  const handle = settings.getByRole("button", {
+    name: "Move Claude Haiku 5.5",
+  });
+  const from = await handle.boundingBox();
+  const first = await settings
+    .getByRole("button", { name: "Move Claude Opus 5.5" })
+    .boundingBox();
+  if (!from || !first) throw new Error("The handles have no place");
+  await settings.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await settings.mouse.down();
+  await settings.mouse.move(first.x + first.width / 2, first.y + 10, {
+    steps: 5,
+  });
+  await expect(settings.locator(".lingo-engine-list__lifted")).toBeVisible();
+  await settings.screenshot({ path: testInfo.outputPath("dragging.png") });
+  await settings.mouse.up();
+  await expect(names()).toHaveText(["Claude Haiku 5.5", "Claude Opus 5.5"]);
+
+  // The first engine is the one that tasks without a choice use.
+  await expect(
+    settings.getByRole("button", { name: /^Translation/ }).first(),
+  ).toContainText("Claude Haiku 5.5");
+
+  // The arrow keys do the same, and the order is kept.
+  await handle.focus();
+  await settings.keyboard.press("ArrowDown");
+  await expect(names()).toHaveText(["Claude Opus 5.5", "Claude Haiku 5.5"]);
+  await settings.reload();
+  await settings.getByRole("button", { name: /^Translation engines/ }).click();
+  await expect(names()).toHaveText(["Claude Opus 5.5", "Claude Haiku 5.5"]);
+});

@@ -118,6 +118,25 @@ export function saveEngine<T extends WithEngines>(
 }
 
 /**
+ * Moves an engine to another place in the list. The order is the one that
+ * lists show, and the first engine is the one a task uses while none is
+ * chosen for it. A place past either end counts as that end.
+ */
+export function moveEngine<T extends WithEngines>(
+  settings: T,
+  id: string,
+  toIndex: number,
+): T {
+  const from = settings.engines.findIndex((engine) => engine.id === id);
+  const moved = settings.engines[from];
+  if (!moved) return settings;
+  const engines = settings.engines.filter((engine) => engine.id !== id);
+  const to = Math.min(engines.length, Math.max(0, toIndex));
+  engines.splice(to, 0, moved);
+  return { ...settings, engines };
+}
+
+/**
  * Removes an engine. A task that used it has no choice of its own after
  * that, and so falls to the first engine that is left.
  */

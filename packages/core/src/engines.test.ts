@@ -3,6 +3,7 @@ import {
   type Engine,
   engineForTask,
   engineName,
+  moveEngine,
   removeEngine,
   saveEngine,
 } from "./engines.ts";
@@ -85,5 +86,50 @@ describe("removeEngine", () => {
 
   it("leaves the other choices as they are", () => {
     expect(removeEngine(settings, "sol").engineFor).toEqual(settings.engineFor);
+  });
+});
+
+describe("moveEngine", () => {
+  const ids = (after: typeof settings) => after.engines.map(({ id }) => id);
+
+  it("moves an engine up or down, and the others close up", () => {
+    expect(ids(moveEngine(settings, "sonnet", 0))).toEqual([
+      "sonnet",
+      "sol",
+      "fable",
+    ]);
+    expect(ids(moveEngine(settings, "sol", 1))).toEqual([
+      "fable",
+      "sol",
+      "sonnet",
+    ]);
+    expect(ids(moveEngine(settings, "sol", 2))).toEqual([
+      "fable",
+      "sonnet",
+      "sol",
+    ]);
+  });
+
+  it("stops at either end", () => {
+    expect(ids(moveEngine(settings, "fable", -3))).toEqual([
+      "fable",
+      "sol",
+      "sonnet",
+    ]);
+    expect(ids(moveEngine(settings, "fable", 99))).toEqual([
+      "sol",
+      "sonnet",
+      "fable",
+    ]);
+  });
+
+  it("changes which engine a task without a choice uses, and no choice", () => {
+    const after = moveEngine(settings, "sonnet", 0);
+    expect(engineForTask(after, "translate")).toBe(sonnet);
+    expect(after.engineFor).toEqual(settings.engineFor);
+  });
+
+  it("leaves the settings alone for an engine that is not there", () => {
+    expect(moveEngine(settings, "gone", 0)).toBe(settings);
   });
 });

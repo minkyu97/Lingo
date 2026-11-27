@@ -23,6 +23,7 @@ export {
   engineName,
   type ModelCapabilities,
   type ModelInfo,
+  moveEngine,
   PROVIDER_IDS,
   type ProviderId,
   removeEngine,

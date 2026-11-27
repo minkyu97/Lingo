@@ -13,7 +13,7 @@ import type { SettingsPanelProps } from "./types.ts";
 type Screen =
   | { name: "main" | DetailScreen }
   | { name: "task"; task: EngineTask }
-  | { name: "addEngine" }
+  | { name: "addEngine"; copyOf?: string }
   | { name: "engine"; engineId: string };
 
 /**
@@ -25,6 +25,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
   const [screen, setScreen] = useState<Screen>({ name: "main" });
   const toMain = () => setScreen({ name: "main" });
   const toEngines = () => setScreen({ name: "engines" });
+  const duplicate = (copyOf: string) =>
+    setScreen({ name: "addEngine", copyOf });
 
   return (
     <div className="lingo lingo-settings">
@@ -44,13 +46,21 @@ export function SettingsPanel(props: SettingsPanelProps) {
         <TaskScreen {...props} task={screen.task} onBack={toEngines} />
       )}
       {screen.name === "addEngine" && (
-        <EngineScreen {...props} onBack={toEngines} />
+        <EngineScreen
+          {...props}
+          // Apart from the screen of the engine it copies, which has that ID.
+          key={`copy of ${screen.copyOf}`}
+          copyOf={screen.copyOf}
+          onDuplicate={duplicate}
+          onBack={toEngines}
+        />
       )}
       {screen.name === "engine" && (
         <EngineScreen
           {...props}
-          key={screen.engineId}
+          key={`engine ${screen.engineId}`}
           engineId={screen.engineId}
+          onDuplicate={duplicate}
           onBack={toEngines}
         />
       )}

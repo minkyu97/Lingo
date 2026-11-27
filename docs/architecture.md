@@ -260,6 +260,8 @@ A user sets up engines, and chooses one for each task. `packages/core/src/engine
 - **The model list comes from the key.** The settings ask the provider which models the key can use, and offer those, newest first. Lingo keeps no list of its own to fall behind. A model ID can also be typed by hand.
 - **What a model accepts** is stored with the engine when the model is picked from the list, where the provider says it. See the adapters below for how it is used.
 - **Removing an engine** hands its tasks to the first engine that is left.
+- **The order of the engines** is the user's to set: each row of the list has a handle to drag, and the up and down arrow keys move an engine while its handle has the focus. The order is the one every list shows, and it decides which engine is the first.
+- **Duplicating an engine** opens the form for a new engine with the old one's provider, key, model, and extra parameters filled in, and no name. Nothing is added until the form is confirmed, so the usual use, the same key with another model, takes two presses.
 - **Before there were engines** the settings held one provider for everything, a model per provider, and a key per provider. On the first read after an update those become engines, and the old keys are removed: the selected provider's lookup model and page model become its engines and take over the tasks, and another provider with a key becomes an engine too.
 
 Not offered: a custom API address for an engine. Each address needs access to its site granted, so it belongs with local model support.
