@@ -1,58 +1,93 @@
-import {
-  normalizeSettings,
-  type ProviderId,
-  perProviderTextSchema,
-  type Settings,
-} from "@lingo/core";
+import { normalizeSettings, type Settings } from "@lingo/core";
 import { browser } from "wxt/browser";
 import { storage } from "wxt/utils/storage";
-import type { z } from "zod";
+import { z } from "zod";
+import { migrateLegacySettings } from "./legacy-settings.ts";
 import {
   type PageTranslationOptions,
   pageTranslationOptionsSchema,
 } from "./page-translation/protocol.ts";
 
-/** One API key per provider, for the providers that have one. */
-export type ApiKeys = z.infer<typeof perProviderTextSchema>;
+/** The API key of each engine that has one, by engine ID. */
+export type EngineKeys = Record<string, string>;
 
 /** What is in storage may be old or damaged. Anything unusable reads as no keys. */
-const storedApiKeys = perProviderTextSchema.catch({});
+const storedEngineKeys = z
+  .record(z.string(), z.unknown())
+  .transform((entries) => {
+    const keys: EngineKeys = {};
+    for (const [id, value] of Object.entries(entries)) {
+      const key = typeof value === "string" ? value.trim() : "";
+      if (key) keys[id] = key;
+    }
+    return keys;
+  })
+  // A new object each time, since callers add to what they are given.
+  .catch(() => ({}));
 
 const settingsItem = storage.defineItem<unknown>("local:settings");
 const pageTranslationItem = storage.defineItem<unknown>(
   "local:pageTranslation",
 );
-const apiKeysItem = storage.defineItem<unknown>("local:apiKeys");
+const engineKeysItem = storage.defineItem<unknown>("local:engineKeys");
+/** One key per provider, from before there were engines. */
+const legacyKeysItem = storage.defineItem<unknown>("local:apiKeys");
+
+/**
+ * Turns settings from before there were engines into engines, once. The old
+ * keys are removed after they have been handed to the new engines.
+ */
+async function migrate(stored: unknown): Promise<unknown> {
+  const migrated = migrateLegacySettings(
+    stored,
+    await legacyKeysItem.getValue(),
+  );
+  if (!migrated) return stored;
+
+  const { keys, ...engines } = migrated;
+  const settings = { ...(stored as object), ...engines };
+  await engineKeysItem.setValue({ ...(await loadEngineKeys()), ...keys });
+  await settingsItem.setValue(normalizeSettings(settings, navigator.language));
+  await legacyKeysItem.removeValue();
+  return settings;
+}
 
 /** Reads the settings, falling back to defaults for anything missing or invalid. */
 export async function loadSettings(): Promise<Settings> {
-  return normalizeSettings(await settingsItem.getValue(), navigator.language);
+  const stored = await migrate(await settingsItem.getValue());
+  return normalizeSettings(stored, navigator.language);
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
   await settingsItem.setValue(settings);
 }
 
-/** Reads how page translation behaves, with defaults for what is not set. */
+/** Reads how page translation is tuned, with defaults for what is not set. */
 export async function loadPageTranslationOptions(): Promise<PageTranslationOptions> {
   return pageTranslationOptionsSchema.parse(
     (await pageTranslationItem.getValue()) ?? {},
   );
 }
 
-export async function loadApiKeys(): Promise<ApiKeys> {
-  return storedApiKeys.parse(await apiKeysItem.getValue());
+export async function loadEngineKeys(): Promise<EngineKeys> {
+  return storedEngineKeys.parse(await engineKeysItem.getValue());
 }
 
-export async function loadApiKey(
-  provider: ProviderId,
+export async function loadEngineKey(
+  engineId: string,
 ): Promise<string | undefined> {
-  return (await loadApiKeys())[provider];
+  return (await loadEngineKeys())[engineId];
 }
 
-/** Replaces the stored keys. An empty or missing entry removes that key. */
-export async function saveApiKeys(keys: ApiKeys): Promise<void> {
-  await apiKeysItem.setValue(perProviderTextSchema.parse(keys));
+/** Stores the key of an engine. An empty or missing key removes it. */
+export async function saveEngineKey(
+  engineId: string,
+  key: string | undefined,
+): Promise<void> {
+  const keys = await loadEngineKeys();
+  delete keys[engineId];
+  if (key?.trim()) keys[engineId] = key.trim();
+  await engineKeysItem.setValue(keys);
 }
 
 /**

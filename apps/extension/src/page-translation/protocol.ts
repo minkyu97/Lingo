@@ -83,8 +83,11 @@ export interface PageConfig {
   options: PageTranslationOptions;
   /** BCP 47 tag of the language the page is translated into. */
   targetLanguage: string;
-  /** The name of the provider that translates, such as "Anthropic". */
-  provider: string;
+  /**
+   * The name of the provider that translates, such as "Anthropic". Missing
+   * while no engine has been added.
+   */
+  provider?: string;
 }
 
 /**

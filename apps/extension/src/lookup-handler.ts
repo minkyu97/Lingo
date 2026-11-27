@@ -1,11 +1,5 @@
-import {
-  LLMError,
-  type LLMProvider,
-  type ProviderId,
-  prepareLookup,
-  type Settings,
-} from "@lingo/core";
-import type { CreateProviderOptions } from "@lingo/providers";
+import { LLMError, prepareLookup, type Settings } from "@lingo/core";
+import { type EngineDeps, providerForTask } from "./engine-provider.ts";
 import { type LookupEvent, parseLookupRequest } from "./messaging.ts";
 
 /** The part of a runtime port the handler uses. */
@@ -15,13 +9,8 @@ export interface LookupPort {
   onDisconnect: { addListener(listener: () => void): void };
 }
 
-export interface LookupDeps {
+export interface LookupDeps extends EngineDeps {
   loadSettings(): Promise<Settings>;
-  loadApiKey(provider: ProviderId): Promise<string | undefined>;
-  /** A lookup only streams, so that is all it asks of a provider. */
-  createProvider(options: CreateProviderOptions): Pick<LLMProvider, "stream">;
-  /** Overrides the provider's API address. Used by end-to-end tests. */
-  baseURL?(provider: ProviderId): string | undefined;
   pingIntervalMs?: number;
 }
 
@@ -63,20 +52,11 @@ export function handleLookupPort(port: LookupPort, deps: LookupDeps): void {
     );
     try {
       const settings = await deps.loadSettings();
-      const apiKey = await deps.loadApiKey(settings.provider);
-      if (!apiKey) {
-        throw new LLMError("missing_key", "No API key is set.");
-      }
+      // Translating and defining each have an engine of their own.
+      const { provider } = await providerForTask(request.mode, settings, deps);
 
       const prepared = prepareLookup(request.mode, request.context, settings);
       post({ type: "started", context: prepared.context });
-
-      const provider = deps.createProvider({
-        provider: settings.provider,
-        apiKey,
-        model: settings.models[settings.provider],
-        baseURL: deps.baseURL?.(settings.provider),
-      });
       const chunks = provider.stream(prepared.request, {
         signal: abort.signal,
       });

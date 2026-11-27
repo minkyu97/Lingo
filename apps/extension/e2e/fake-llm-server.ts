@@ -2,8 +2,9 @@
  * Stands in for the provider APIs in end-to-end tests. It also serves the
  * page the tests select text on.
  *
- * - `GET /v1/models` is what a key check calls. It accepts any key except
- *   the ones in `KEY_CHECKS`, which stand for the ways a check can go wrong.
+ * - `GET /v1/models` is what a key check calls, and it lists the models of
+ *   the provider that asks. It accepts any key except the ones in
+ *   `KEY_CHECKS`, which stand for the ways a check can go wrong.
  * - `POST /v1/messages` and `POST /v1/responses` stream a recorded answer
  *   from `spec/fixtures`: a dictionary entry as JSON when the request asks
  *   for a JSON schema, plain text otherwise. A key of `revoked-key` gets a
@@ -132,13 +133,44 @@ const KEY_CHECKS: Record<string, "reject" | "drop" | "delay"> = {
   "slow-key": "delay",
 };
 
-/** A model list in a shape both the Anthropic and the OpenAI SDK accept. */
-const MODELS = {
-  object: "list",
-  data: [{ id: "test-model", type: "model", object: "model" }],
+const everything = {
+  effort: { supported: true },
+  structured_outputs: { supported: true },
+};
+
+/** What Anthropic lists for a key: newest first, with what each accepts. */
+const ANTHROPIC_MODELS = {
+  data: [
+    ["claude-fable-5-2", "Claude Fable 5.2"],
+    ["claude-haiku-5-5", "Claude Haiku 5.5"],
+    ["claude-sonnet-5-5", "Claude Sonnet 5.5"],
+    ["claude-opus-5-5", "Claude Opus 5.5"],
+  ].map(([id, display_name]) => ({
+    type: "model",
+    id,
+    display_name,
+    capabilities: everything,
+  })),
   has_more: false,
-  first_id: "test-model",
-  last_id: "test-model",
+  first_id: "claude-fable-5-2",
+  last_id: "claude-opus-5-5",
+};
+
+/** What OpenAI lists: every kind of model, in no order, by ID only. */
+const OPENAI_MODELS = {
+  object: "list",
+  data: [
+    ["tts-1", 500],
+    ["gpt-6-luna", 200],
+    ["gpt-image-2", 400],
+    ["gpt-6.2-sol", 300],
+    ["text-embedding-3-large", 100],
+  ].map(([id, created]) => ({
+    id,
+    created,
+    object: "model",
+    owned_by: "system",
+  })),
 };
 
 const UNAUTHORIZED = {
@@ -359,7 +391,11 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (outcome === "delay") await sleep(1500);
-    response.writeHead(200, json).end(JSON.stringify(MODELS));
+    // Only Anthropic's client says which version of the API it speaks.
+    const models = request.headers["anthropic-version"]
+      ? ANTHROPIC_MODELS
+      : OPENAI_MODELS;
+    response.writeHead(200, json).end(JSON.stringify(models));
     return;
   }
 

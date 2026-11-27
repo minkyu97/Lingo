@@ -1,4 +1,4 @@
-import type { LLMProvider, ProviderId } from "@lingo/core";
+import type { LLMProvider, ModelCapabilities, ProviderId } from "@lingo/core";
 import { createAnthropicProvider } from "./anthropic.ts";
 import { createOpenAIProvider } from "./openai.ts";
 
@@ -9,6 +9,10 @@ export interface CreateProviderOptions {
   apiKey: string;
   /** Model ID. Defaults to the provider's default model. */
   model?: string;
+  /** What the provider said the model accepts. */
+  capabilities?: ModelCapabilities;
+  /** Merged into every request. */
+  parameters?: Record<string, unknown>;
   baseURL?: string;
   maxRetries?: number;
   fetch?: typeof fetch;

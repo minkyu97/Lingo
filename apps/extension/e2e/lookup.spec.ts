@@ -115,8 +115,8 @@ test("uses OpenAI when it is the chosen provider", async ({
     language: "Japanese",
   });
   await expect(
-    settings.getByRole("button", { name: /^Translation engine/ }),
-  ).toContainText("GPT-6.2 Sol");
+    settings.getByRole("button", { name: /^Translation engines/ }),
+  ).toContainText("1 engine");
   await expect(settings.getByText("日本語")).toBeVisible();
   await settings.screenshot({ path: testInfo.outputPath("settings.png") });
   const page = await openPageAndSelect(context, "bank");
@@ -153,15 +153,17 @@ test("explains a rejected key and leads back to settings", async ({
   // The settings open in the same page, where the key can be corrected.
   await panel(page).getByRole("button", { name: "Open settings" }).click();
   await expect(
-    drawer(page).getByRole("button", { name: /^Translation engine/ }),
-  ).toContainText("Claude Opus 5.5");
+    drawer(page).getByRole("button", { name: /^Translation engines/ }),
+  ).toContainText("1 engine");
 });
 
 test("asks for a key before the first lookup", async ({ context }) => {
   const page = await openPageAndSelect(context, "bank");
   await trigger(page).click();
 
-  await expect(panel(page)).toContainText("Add an API key in settings");
+  await expect(panel(page)).toContainText(
+    "Add a translation engine in settings",
+  );
   expect(await recordedRequests(page)).toEqual([]);
 });
 

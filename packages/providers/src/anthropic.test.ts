@@ -133,6 +133,50 @@ describe("createAnthropicProvider", () => {
     expect(calls[0]?.body).not.toHaveProperty("output_config");
   });
 
+  it("asks a model it does not know for what its provider said it accepts", async () => {
+    const { fetch, calls } = fakeFetch(() =>
+      sseResponse(fixture("anthropic-text.sse")),
+    );
+    const provider = createAnthropicProvider({
+      apiKey: "test-key",
+      model: "claude-next",
+      capabilities: { effort: true, structuredOutput: false },
+      fetch,
+      maxRetries: 0,
+    });
+    await collect(provider, {
+      ...sampleRequest,
+      format: { name: "f", schema: {} },
+    });
+
+    expect(calls[0]?.body).toMatchObject({
+      model: "claude-next",
+      output_config: { effort: "low" },
+    });
+    // No schema, since the model was not said to take one, and no fallback.
+    expect(calls[0]?.body).not.toHaveProperty("output_config.format");
+    expect(calls[0]?.body).not.toHaveProperty("fallbacks");
+  });
+
+  it("merges extra parameters into the request, over its own", async () => {
+    const { fetch, calls } = fakeFetch(() =>
+      sseResponse(fixture("anthropic-text.sse")),
+    );
+    const provider = createAnthropicProvider({
+      apiKey: "test-key",
+      model: "claude-next",
+      parameters: { temperature: 0.3, max_tokens: 500 },
+      fetch,
+      maxRetries: 0,
+    });
+    await collect(provider, sampleRequest);
+    expect(calls[0]?.body).toMatchObject({
+      model: "claude-next",
+      temperature: 0.3,
+      max_tokens: 500,
+    });
+  });
+
   it("reports a refusal", async () => {
     const error = await failure(() =>
       sseResponse(fixture("anthropic-refusal.sse")),
@@ -185,22 +229,54 @@ describe("createAnthropicProvider", () => {
   });
 });
 
-describe("checking a key with Anthropic", () => {
+describe("listing the models of an Anthropic key", () => {
   const models = {
-    data: [{ type: "model", id: "claude-opus-5-5" }],
-    has_more: true,
-    first_id: "claude-opus-5-5",
-    last_id: "claude-opus-5-5",
+    data: [
+      {
+        type: "model",
+        id: "claude-fable-5-2",
+        display_name: "Claude Fable 5.2",
+        capabilities: {
+          effort: { supported: true },
+          structured_outputs: { supported: true },
+        },
+      },
+      {
+        type: "model",
+        id: "claude-haiku-4-5",
+        display_name: "Claude Haiku 4.5",
+        capabilities: {
+          effort: { supported: false },
+          structured_outputs: { supported: true },
+        },
+      },
+      { type: "model", id: "claude-old", display_name: "" },
+    ],
+    has_more: false,
+    first_id: "claude-fable-5-2",
+    last_id: "claude-old",
   };
 
-  it("resolves when the key is accepted, without generating anything", async () => {
+  it("returns them as listed, with what each one accepts", async () => {
     const { provider, calls } = providerFor(() => jsonResponse(models));
-    await expect(provider.checkKey()).resolves.toBeUndefined();
+    expect(await provider.listModels()).toEqual([
+      {
+        id: "claude-fable-5-2",
+        label: "Claude Fable 5.2",
+        capabilities: { effort: true, structuredOutput: true },
+      },
+      {
+        id: "claude-haiku-4-5",
+        label: "Claude Haiku 4.5",
+        capabilities: { effort: false, structuredOutput: true },
+      },
+      { id: "claude-old", label: "claude-old", capabilities: undefined },
+    ]);
 
+    // One request, which generates nothing.
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("GET");
     expect(new URL(calls[0]?.url ?? "").pathname).toBe("/v1/models");
-    expect(calls[0]?.headers.get("authorization")).toBe("Bearer test-key");
   });
 
   it("reports a rejected key", async () => {
@@ -210,7 +286,7 @@ describe("checking a key with Anthropic", () => {
         error: { type: "authentication_error", message: "invalid x-api-key" },
       }),
     );
-    const error = await provider.checkKey().catch((e) => e);
+    const error = await provider.listModels().catch((e) => e);
     expect(error).toBeInstanceOf(LLMError);
     expect(error.kind).toBe("auth");
   });
@@ -222,7 +298,7 @@ describe("checking a key with Anthropic", () => {
         error: { type: "overloaded_error", message: "Overloaded" },
       }),
     );
-    const error = await provider.checkKey().catch((e) => e);
+    const error = await provider.listModels().catch((e) => e);
     expect(error).toBeInstanceOf(LLMError);
     expect(error.kind).not.toBe("auth");
   });
@@ -235,7 +311,7 @@ describe("checking a key with Anthropic", () => {
         throw new TypeError("fetch failed");
       },
     });
-    const error = await provider.checkKey().catch((e) => e);
+    const error = await provider.listModels().catch((e) => e);
     expect(error).toBeInstanceOf(LLMError);
     expect(error.kind).toBe("network");
   });

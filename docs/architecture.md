@@ -32,7 +32,7 @@ Background research:
 Lingo/
 ├─ packages/
 │  ├─ core/        @lingo/core: domain types, the LLM port, prompt builder, lookup use case, page translation protocol
-│  ├─ providers/   @lingo/providers: Anthropic and OpenAI adapters, model catalog
+│  ├─ providers/   @lingo/providers: Anthropic and OpenAI adapters, and what is known about their models
 │  └─ ui/          @lingo/ui: design tokens and React components shared by the extension and the desktop app
 ├─ apps/
 │  ├─ extension/   @lingo/extension: WXT app for Chrome, Safari later
@@ -91,8 +91,9 @@ interface LLMProvider {
     request: ChatRequest,
     options?: { signal?: AbortSignal },
   ): AsyncIterable<string>;
-  // Resolves when the provider accepts the API key. Generates nothing.
-  checkKey(): Promise<void>;
+  // The models the API key can use, newest first. Generates nothing, and
+  // is also how a key is checked.
+  listModels(): Promise<ModelInfo[]>;
 }
 
 type LLMErrorKind =
@@ -110,15 +111,17 @@ Adapters turn every provider failure into an `LLMError` with one of those kinds,
 
 Data that arrives without a trustworthy type goes through a Zod schema, and the TypeScript type is inferred from that schema where the schema defines the shape. This keeps a type and its check from drifting apart.
 
-| Data                              | Schema                                            | On bad input                                                        |
-| --------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------- |
-| Messages from a content script    | `apps/extension/src/messaging.ts`                 | The message is rejected. Optional fields that are wrong are dropped |
-| Page translation requests         | `apps/extension/src/page-translation/protocol.ts` | The request is ignored. A request that is too large counts as wrong |
-| Stored tuning of page translation | `apps/extension/src/page-translation/protocol.ts` | Each wrong value falls back to its default                          |
-| Answers to a message              | `apps/extension/src/messaging.ts`                 | An unexpected answer, or none, reads as "could not be done"         |
-| Stored settings                   | `normalizeSettings` in `core`                     | Each wrong field falls back to its default                          |
-| Stored API keys and model IDs     | `perProviderTextSchema` in `core`                 | Wrong entries are left out                                          |
-| A model's dictionary entry        | `packages/core/src/dictionary.ts`                 | Each missing or wrong field reads as empty                          |
+| Data                                    | Schema                                            | On bad input                                                        |
+| --------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------- |
+| Messages from a content script          | `apps/extension/src/messaging.ts`                 | The message is rejected. Optional fields that are wrong are dropped |
+| Page translation requests               | `apps/extension/src/page-translation/protocol.ts` | The request is ignored. A request that is too large counts as wrong |
+| Stored tuning of page translation       | `apps/extension/src/page-translation/protocol.ts` | Each wrong value falls back to its default                          |
+| Answers to a message                    | `apps/extension/src/messaging.ts`                 | An unexpected answer, or none, reads as "could not be done"         |
+| Stored settings                         | `normalizeSettings` in `core`                     | Each wrong field falls back to its default                          |
+| Stored engines                          | `enginesSchema` in `core`                         | An engine that is unusable is left out, and the rest stay           |
+| Stored API keys                         | `apps/extension/src/stores.ts`                    | Wrong entries are left out                                          |
+| Settings from before there were engines | `apps/extension/src/legacy-settings.ts`           | Anything of another shape is not converted                          |
+| A model's dictionary entry              | `packages/core/src/dictionary.ts`                 | Each missing or wrong field reads as empty                          |
 
 Schemas use the regular `zod` API, chosen for readability over size. It adds about 83 kB to the content script, which is injected into every frame of every page. The tree-shakable `zod/mini` would add about 23 kB, at the cost of a wordier, function-style notation.
 
@@ -247,6 +250,20 @@ Extension rules, as implemented:
 
 Desktop open decision: either the webview calls providers through the shared TypeScript adapters, fetching the key from the Rust side at call time, or a Rust command proxies the HTTP request and injects the key so it never enters JavaScript. The first shares more code; the second keeps the key further from the UI layer.
 
+### Engines
+
+A user sets up engines, and chooses one for each task. `packages/core/src/engines.ts` defines them.
+
+- **An engine** is a provider, one of its models, and an API key, under a name. It can also carry extra request parameters. A user adds as many as they like, also several of one provider.
+- **A task** is one of the things Lingo does with a model: translating a selection, defining a word or phrase, and translating a page. Each has an engine of its own, and they need not share a provider. A task for which none is chosen uses the first engine, so the first engine that is added does everything.
+- **Keys are stored apart from engines**, by engine ID, so that the settings can go where a key must not. A new engine of a provider that already has one starts with that engine's key filled in.
+- **The model list comes from the key.** The settings ask the provider which models the key can use, and offer those, newest first. Lingo keeps no list of its own to fall behind. A model ID can also be typed by hand.
+- **What a model accepts** is stored with the engine when the model is picked from the list, where the provider says it. See the adapters below for how it is used.
+- **Removing an engine** hands its tasks to the first engine that is left.
+- **Before there were engines** the settings held one provider for everything, a model per provider, and a key per provider. On the first read after an update those become engines, and the old keys are removed: the selected provider's lookup model and page model become its engines and take over the tasks, and another provider with a key becomes an engine too.
+
+Not offered: a custom API address for an engine. Each address needs access to its site granted, so it belongs with local model support.
+
 ### Provider adapters
 
 | Adapter                                  | Covers                                                        | Status                                          |
@@ -255,27 +272,29 @@ Desktop open decision: either the webview calls providers through the shared Typ
 | OpenAI                                   | OpenAI models, through the official SDK and the Responses API | Done                                            |
 | OpenAI-compatible with a custom base URL | Local LLMs (Ollama, LM Studio and similar)                    | Planned. The adapters already accept a base URL |
 
-`packages/providers/src/catalog.ts` lists the models offered in settings and imports no SDK, so UI code can use it without bundling one. A model ID can also be typed in by hand.
+`packages/providers/src/catalog.ts` holds what is known about a provider without asking it: its name, where to get a key, and what the models Lingo knows by name accept. It imports no SDK, so UI code can use it without bundling one. Which models a key can use is asked of the provider. See [Engines](#engines).
 
 Both hosted APIs permit cross-origin calls from an extension. In Chrome, calls from the service worker to origins in `host_permissions` skip CORS entirely ([Chrome](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests)).
 
 What the Anthropic adapter does. A live run of `pnpm smoke` confirmed these against the API on 2026-11-21:
 
-- The default model is `claude-opus-5-5`. Sonnet 5.5 and Haiku 5.5 are offered as alternatives.
+- The model is the engine's. Without one, as in a key check, it is `claude-opus-5-5`.
 - The client is created with `dangerouslyAllowBrowser`, which also makes the SDK send the `anthropic-dangerous-direct-browser-access` header the API requires from browser origins.
 - Requests stream through `messages.stream`. Only text deltas are passed on; thinking blocks are skipped.
 - `output_config.effort` is set to `low`, since lookups are simple and a fast first token matters. `thinking` and sampling parameters are not sent.
 - When a request has a `format`, its schema is sent as `output_config.format`, which holds the answer to it. This works together with streaming and with the fallback below.
 - A refused request (`stop_reason: "refusal"`) becomes an `LLMError` of kind `refusal`. On Opus 5.5 and Sonnet 5.5 the adapter also turns on server-side fallback (`fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta), so a declined request is retried on another model before it fails. Haiku 5.5 has no server-side fallback, so the parameter is not sent to it.
-- `effort`, `format`, and `fallbacks` go only to models in the catalog. A model ID typed in by hand gets a plain request, because some models reject these parameters.
+- `effort` and `format` go to models in the catalog, and to models that the provider's own list says accept them. `fallbacks` goes only to models in the catalog. Any other model gets a plain request, because some models reject these parameters.
 
 What the OpenAI adapter does, confirmed the same way:
 
-- The default model is `gpt-6.2-sol`. `gpt-6.2-astra` and `gpt-6-luna` are offered as alternatives.
+- The model is the engine's. Without one it is `gpt-6.2-sol`. OpenAI does not say what a model accepts, so a schema is sent only to the models in the catalog.
 - Requests stream through the Responses API with `store: false`, so the user's text is not kept on OpenAI's side.
 - When a request has a `format`, its schema is sent as `text.format` with `strict: true`.
 
-Checking a key, in both adapters: `checkKey` lists the provider's models, which needs a valid key and generates nothing, so it costs nothing. It waits 10 seconds and tries again once at most, because someone is watching a spinner. A refusal becomes an `LLMError` of kind `auth`; any other failure leaves the question open. A live run of `pnpm smoke` confirmed on 2026-11-24 that both providers accept a real key and refuse a made-up one this way.
+Listing models, in both adapters: `listModels` asks the provider which models the key can use. That needs a valid key and generates nothing, so it costs nothing, and it is also how a key is checked. It waits 10 seconds and tries again once at most, because someone is watching a spinner. A refusal becomes an `LLMError` of kind `auth`; any other failure leaves the question open. Anthropic lists text models only, newest first, with a name for each and what each accepts. OpenAI lists every model of the account by ID only, speech and image models among them, so the adapter keeps the ones that answer text and sorts them by date. A live run of `pnpm smoke` confirmed on 2026-11-26 that a real key lists its models (14 for Anthropic, 52 text models for OpenAI) and that a made-up key is refused.
+
+Extra parameters: an engine can carry a JSON object that is merged into every request, over what the adapter sets itself. It is for what Lingo offers no setting for, such as a temperature. The OpenAI adapter still asks for a stream whatever the parameters say, because that is how it reads the answer.
 
 Not done yet: prompt caching. It matters for page translation, where many requests share a prefix. It needs a shared prefix of at least 512 tokens on current Claude models, so the short lookup prompts would not benefit.
 
@@ -313,7 +332,7 @@ How the settings open:
 4. That page asks the background whether a drawer was just opened in its tab, and shows the settings only if so. See "The settings drawer" below for why.
 5. The drawer closes on a second press of the toolbar button, on Escape, or from its Close button. The lookup popup's "Open settings" button opens the same drawer.
 
-The settings have no Save button. Each change is stored as it is made, except an API key, which is stored once its provider has accepted it.
+The settings have no Save button. Each change is stored as it is made. A new engine is the exception: it exists once "Add engine" is pressed, and an API key is stored only after its provider has accepted it.
 
 How a page is translated:
 
@@ -339,7 +358,9 @@ Where things are in `apps/extension`:
 | `src/messaging.ts`                            | The message types shared by the content script, the pages, and the background, and their validation                                                                 |
 | `src/lookup-handler.ts`                       | The background side of a lookup, written against a small port interface so it is tested without a browser                                                           |
 | `src/lookup-client.ts`, `src/lookup-state.ts` | The content-script side: opening the port, and folding events into popup state                                                                                      |
-| `src/key-check.ts`                            | Checking an API key: the background side, which asks the provider, and the settings side, which asks the background                                                 |
+| `src/key-check.ts`                            | Checking an API key and listing its models: the background side, which asks the provider, and the settings side, which asks the background                          |
+| `src/engine-provider.ts`                      | Building the provider for a task from the engine chosen for it and that engine's key                                                                                |
+| `src/legacy-settings.ts`                      | Turning settings from before there were engines into engines, once                                                                                                  |
 | `src/settings-drawer.ts`                      | The background side of the drawer: passing requests to the top frame, falling back to a tab, and the grant for the page in the drawer                               |
 | `src/context/dom.ts`                          | DOM context capture                                                                                                                                                 |
 | `src/page-translation/units.ts`               | Splitting a page into units, and writing each unit as text with inline tags                                                                                         |
@@ -350,7 +371,7 @@ Where things are in `apps/extension`:
 | `src/page-translation/bar.ts`                 | What the page bar says for each state of a translation, and the one thing it offers to do                                                                           |
 | `src/page-translation/handler.ts`             | The background side: permits at the configured rate from `rate-limiter.ts`, and the stream of translated segments                                                   |
 | `src/page-translation/protocol.ts`            | The messages of the page translation port, the options, and their validation                                                                                        |
-| `src/stores.ts`                               | Settings and key storage                                                                                                                                            |
+| `src/stores.ts`                               | Storage of the settings, and of one API key per engine                                                                                                              |
 | `src/position.ts`, `src/drag.ts`              | Where the button and the popup go. The popup opens below the selection or above it, or where it was dragged, and stays in the viewport                              |
 | `e2e/`                                        | Playwright tests, the helpers they share, and the fake LLM server they run against. Also the live check of page translation, which is not a test and is run by hand |
 
@@ -368,8 +389,8 @@ Design points of page translation:
 
 - **The page's own nodes.** A translation is written into the text nodes the page already has, and the page's inline elements are moved to follow the new word order. No node of the page is removed or given another parent. So every style, link, and event listener stays, and the page's own scripts find their nodes where they left them, which matters on a site built with a framework. Elements are moved with `moveBefore` where the browser has it, which does not reset them. The translator's own changes do not count as changes of the page: it throws away the mutation records of what it wrote.
 - **Tags that do not fit.** A model does not always return the tags it was given. A tag that the segment did not have, a tag used twice, or a tag inside the wrong tag is taken off, and its words stay. A translation that lacks a tag cannot be mended, because there is no telling where that element belongs. The unit is then sent once more, in a request of its own. If the second answer lacks a tag too, it is used all the same: the paragraph shows translated, and an element whose tag is missing stays in the page after the text, a link or bold text without its words, kept text or an image as it is.
-- **A model for pages.** Page translation has a model setting of its own, apart from the one for lookups, because the two pull in different directions: a lookup is one short request that deserves the strongest model, and a page is many requests that someone is waiting to read. Each provider has a default for pages in the catalog. For Anthropic it is Claude Haiku 5.5. For OpenAI it is the lookup default, GPT-6.2 Sol: in a live run on 2026-11-25 neither GPT-6.2 Astra (13.6 s for a screen and the one below it, no tag wrong) nor GPT-6 Luna (19.5 s, 4 of 43 tagged segments wrong at first) was faster.
-- **Two settings, two knobs.** The settings panel offers the model and the request rate (1, 2, 3, 5, or 10 per second). How far ahead of the viewport text is translated, and how much text goes into one request, are not settings. They are stored apart, as tuning, with defaults that are meant to be right, and end-to-end tests change them to make a small page behave like a large one.
+- **An engine for pages.** Page translation has an engine of its own, apart from the ones for lookups, because the tasks pull in different directions: a lookup is one short request that deserves the strongest model, and a page is many requests that someone is waiting to read. In live runs a screen and the one below it took about 5 seconds with Claude Haiku 5.5 and about 11 with Claude Opus 5.5. Nothing picks a fast engine for the user: the first engine does every task until another is chosen.
+- **One setting, two knobs.** The settings panel offers the request rate (1, 2, 3, 5, or 10 per second). How far ahead of the viewport text is translated, and how much text goes into one request, are not settings. They are stored apart, as tuning, with defaults that are meant to be right, and end-to-end tests change them to make a small page behave like a large one.
 - **One switch per tab.** Whether a page is translated is decided in its top frame, where the page bar is. The panel, the page bar, and the shortcut all send the same message, `page-translation`, to the background, and `src/page-translation/switch.ts` passes it to the top frame. What comes of it goes to the other frames (`page-translation-set`) and to the extension's own pages (`page-translation-changed`), so that the panel's row follows a change made with the shortcut. A frame that loads later asks, and joins in. When an API key is saved in the panel, the panel asks for another try, so a translation that stopped for want of a key goes on by itself.
 - **Text that is waiting.** A paragraph shows as gray bars from the moment it is queued until its translation is written, so the reader sees what is on its way. The bars are CSS custom highlights (`placeholders.ts`): the browser paints them on the text itself, one bar per line and exactly as wide, and they scroll, clip, and stack as the text does. Nothing is added to the page's elements; the rules go in through `adoptedStyleSheets`. A highlight cannot be animated, so the pulse is made by moving each group of text from one color to the next every 170 ms, with neighbouring paragraphs a step apart. The bars have square corners and one flat color for the same reason. With reduced motion they hold still.
 - **Looking ahead.** The observer's margin is set as `scrollMargin`, in pixels. That widens the viewport and every scrolling box inside the page alike. A `rootMargin` on top of it would count twice for the page itself: an end-to-end test caught text five screens away being translated.
@@ -488,7 +509,7 @@ Deferred. `ACTION_PROCESS_TEXT` provides the selected text only, so the feature 
 | Safari kills the background script mid-request                                                                                                                                                        | Short requests. Page translation sends again what was in progress when its port closes                                                                                                                            |
 | App Store rejects a bring-your-own-key app                                                                                                                                                            | Build the iOS app last; keep the extension and desktop independent of it                                                                                                                                          |
 | Default-translation extension limits are undocumented                                                                                                                                                 | Prototype early in step 4                                                                                                                                                                                         |
-| The content script loads React, Zod, and the page translation engine into every frame of every page, about 361 kB                                                                                     | Measure the effect on page load. If it matters, load the UI on first use, switch to a lighter renderer, or move the schemas to `zod/mini`                                                                         |
+| The content script loads React, Zod, and the page translation engine into every frame of every page, about 366 kB                                                                                     | Measure the effect on page load. If it matters, load the UI on first use, switch to a lighter renderer, or move the schemas to `zod/mini`                                                                         |
 | Automated tests do not press the real Chrome shortcut, or call a real provider from the service worker                                                                                                | Check both by hand before a release. The toolbar button is pressed for real, through the browser's debugging protocol. `pnpm smoke` covers the adapters against the real APIs from Node                           |
 | A web page can imitate the settings drawer to ask for a key, or cover the real one                                                                                                                    | Accepted for now. A page cannot read the real drawer or the stored key, but nothing stops it from drawing a fake one. Revisit before a public release                                                             |
 | After an install or update, the selection button and the page translation shortcut do not work in tabs that were already open, until the tab is reloaded or the toolbar button is pressed there       | Accepted for now. Starting the content script in every open tab would need access to all sites up front `[inferred]`                                                                                              |

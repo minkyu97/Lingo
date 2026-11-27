@@ -1,6 +1,7 @@
 /** Changing the settings, and what the extension does with the changes. */
 import type { Page } from "@playwright/test";
 import {
+  addEngine,
   drawer,
   drawerFrame,
   expect,
@@ -61,18 +62,16 @@ test("opens inside the page when the toolbar button is pressed", async ({
   await expectDocked(page);
   await page.screenshot({ path: testInfo.outputPath("drawer.png") });
 
-  // A key entered here is checked and stored like anywhere else, although
+  // An engine added here has its key checked and stored like anywhere else, although
   // this frame sits inside a web page.
   await drawer(page)
-    .getByRole("button", { name: /^Translation engine/ })
+    .getByRole("button", { name: /^Translation engines/ })
     .click();
-  await drawer(page).getByLabel("API key").fill("test-key");
-  await drawer(page).getByLabel("API key").press("Enter");
-  await expect(drawer(page).getByText(/^Saved\./)).toBeVisible();
+  await addEngine(drawer(page), { apiKey: "test-key" });
   await drawer(page).getByRole("button", { name: "Back" }).click();
   await expect(
-    drawer(page).getByRole("button", { name: /^Translation engine/ }),
-  ).toContainText("Claude Opus 5.5");
+    drawer(page).getByRole("button", { name: /^Translation engines/ }),
+  ).toContainText("1 engine");
 
   // It leaves the way it came: sliding, and then it is off the page.
   const leaving = nextAnimationToEnd(page);
@@ -220,44 +219,48 @@ test("follows the system theme inside the drawer", async ({
   await page.screenshot({ path: testInfo.outputPath("drawer-dark.png") });
 });
 
-test("checks a key with the provider before storing it", async ({
+test("checks a key with the provider before an engine is added", async ({
   context,
   extensionId,
 }, testInfo) => {
   const settings = await context.newPage();
   await settings.goto(`chrome-extension://${extensionId}/options.html`);
-  const engine = settings.getByRole("button", { name: /^Translation engine/ });
-  await expect(engine).toContainText("Not set");
-  await engine.click();
+  const engines = settings.getByRole("button", {
+    name: /^Translation engines/,
+  });
+  await expect(engines).toContainText("Not set");
+  await engines.click();
+  await settings.getByRole("button", { name: "Add engine" }).click();
   const key = settings.getByLabel("API key");
+  const add = settings.getByRole("button", { name: "Add engine" });
   const enter = async (value: string) => {
     await key.fill(value);
     await key.press("Enter");
   };
 
-  // A key the provider refuses is not stored.
+  // Before a key is in, there is no model to pick and nothing to add.
+  await expect(
+    settings.getByText("Enter the API key to see the models it can use."),
+  ).toBeVisible();
+  await expect(settings.getByRole("radio")).toHaveCount(1);
+  await expect(add).toBeDisabled();
+
+  // A key the provider refuses brings no models.
   await enter("bad-key");
   await expect(
-    settings.getByText("Not saved. Anthropic rejected this key."),
+    settings.getByText("Not stored. Anthropic rejected this key."),
   ).toBeVisible();
   await expect(key).toHaveAttribute("aria-invalid", "true");
-  await expect(key).toHaveValue("bad-key");
+  await expect(add).toBeDisabled();
   await settings.screenshot({ path: testInfo.outputPath("rejected.png") });
 
-  // Nor is one that could not be checked. The check can be tried again.
+  // Nor does one that could not be checked. The check can be tried again.
   await enter("offline-key");
-  const unreachable = settings.getByText(
-    "Not saved. Lingo could not reach Anthropic.",
-  );
+  const unreachable = settings.getByText("Lingo could not reach Anthropic.");
   await expect(unreachable).toBeVisible();
   await settings.getByRole("button", { name: "Try again" }).click();
   await expect(settings.getByText(/^Checking the key/)).toBeVisible();
   await expect(unreachable).toBeVisible();
-
-  await settings.getByRole("button", { name: "Back" }).click();
-  await expect(engine).toContainText("Not set");
-  await engine.click();
-  await expect(key).toHaveValue("");
 
   // While the provider is being asked, the field cannot be edited.
   await enter("slow-key");
@@ -267,17 +270,63 @@ test("checks a key with the provider before storing it", async ({
   await expect(key).toBeDisabled();
   await settings.screenshot({ path: testInfo.outputPath("checking.png") });
   await expect(
-    settings.getByText("Saved. Anthropic accepted this key."),
+    settings.getByText("Anthropic accepted this key."),
   ).toBeVisible();
   await expect(key).toBeEnabled();
-  await settings.screenshot({ path: testInfo.outputPath("saved.png") });
 
-  await settings.getByRole("button", { name: "Back" }).click();
-  await expect(engine).toContainText("Claude Opus 5.5");
+  // The models are the ones the provider lists for the key, newest first.
+  await expect(settings.getByRole("radio")).toHaveCount(5);
+  await expect(settings.locator(".lingo-option-row").first()).toContainText(
+    "Claude Fable 5.2",
+  );
+  await expect(add).toBeDisabled();
+  await settings.getByRole("radio", { name: "Claude Fable 5.2" }).check();
+  await settings.screenshot({ path: testInfo.outputPath("accepted.png") });
+  await add.click();
 
-  // Emptying the field removes the key, without asking the provider.
-  await engine.click();
-  await enter("");
+  await expect(
+    settings.getByRole("button", { name: /^Claude Fable 5.2/ }),
+  ).toContainText("Anthropic");
+  await settings.screenshot({ path: testInfo.outputPath("engines.png") });
   await settings.getByRole("button", { name: "Back" }).click();
-  await expect(engine).toContainText("Not set");
+  await expect(engines).toContainText("1 engine");
+});
+
+test("keeps what was set up before there were engines", async ({
+  context,
+  worker,
+  extensionId,
+}) => {
+  // Settings and a key, as an earlier version stored them.
+  await worker.evaluate(async () => {
+    const { storage } = (
+      globalThis as unknown as {
+        chrome: { storage: { local: { set(items: object): Promise<void> } } };
+      }
+    ).chrome;
+    await storage.local.set({
+      settings: {
+        provider: "anthropic",
+        models: { anthropic: "claude-sonnet-5-5" },
+        pageModels: {},
+        targetLanguage: "ko",
+      },
+      apiKeys: { anthropic: "test-key" },
+    });
+  });
+
+  const settings = await context.newPage();
+  await settings.goto(`chrome-extension://${extensionId}/options.html`);
+  const row = (name: RegExp) => settings.getByRole("button", { name });
+  await expect(row(/^Translation engines/)).toContainText("2 engines");
+  await expect(row(/^Translate into/)).toContainText("한국어");
+
+  await row(/^Translation engines/).click();
+  await expect(row(/^Translation/).first()).toContainText("Claude Sonnet 5.5");
+  await expect(row(/^Definition/)).toContainText("Claude Sonnet 5.5");
+  await expect(row(/^Page translation/)).toContainText("Claude Haiku 5.5");
+
+  // The key came along.
+  await row(/^Claude Haiku 5.5/).click();
+  await expect(settings.getByLabel("API key")).toHaveValue("test-key");
 });

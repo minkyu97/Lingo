@@ -1,25 +1,28 @@
 import { z } from "zod";
-
-export const PROVIDER_IDS = ["anthropic", "openai"] as const;
-
-export type ProviderId = (typeof PROVIDER_IDS)[number];
+import {
+  ENGINE_TASKS,
+  type Engine,
+  type EngineChoices,
+  engineChoicesSchema,
+  enginesSchema,
+  PROVIDER_IDS,
+  type ProviderId,
+} from "./engines.ts";
 
 export interface Settings {
-  /** The provider lookups are sent to. */
-  provider: ProviderId;
-  /** Model ID per provider. A missing entry means that provider's default. */
-  models: Partial<Record<ProviderId, string>>;
+  /** The engines the user has added, in the order they were added. */
+  engines: Engine[];
+  /**
+   * The engine of each task, by ID. A task without an entry uses the first
+   * engine.
+   */
+  engineFor: EngineChoices;
   /** BCP 47 tag of the language to translate into, such as "ko". */
   targetLanguage: string;
   /** Whether text around the selection is sent along with it. */
   contextAwareness: boolean;
   /** Upper bound on the surrounding text that is sent, in characters. */
   maxContextChars: number;
-  /**
-   * Model ID per provider for translating whole pages. A missing entry means
-   * that provider's default for pages, which is a fast one.
-   */
-  pageModels: Partial<Record<ProviderId, string>>;
   /** Most page translation requests started in any one second. */
   pageRequestsPerSecond: number;
 }
@@ -84,12 +87,11 @@ export const perProviderTextSchema = z
 /** Settings for a first run. The target language follows the given locale. */
 export function defaultSettings(locale?: string): Settings {
   return {
-    provider: "anthropic",
-    models: {},
+    engines: [],
+    engineFor: {},
     targetLanguage: targetLanguageFor(locale),
     contextAwareness: true,
     maxContextChars: 1000,
-    pageModels: {},
     pageRequestsPerSecond: 3,
   };
 }
@@ -104,8 +106,8 @@ export function normalizeSettings(value: unknown, locale?: string): Settings {
   const defaults = defaultSettings(locale);
   const schema = z
     .object({
-      provider: z.enum(PROVIDER_IDS).catch(defaults.provider),
-      models: perProviderTextSchema.catch({}),
+      engines: enginesSchema,
+      engineFor: engineChoicesSchema,
       targetLanguage: z
         .string()
         .refine(isLanguageTag)
@@ -115,7 +117,6 @@ export function normalizeSettings(value: unknown, locale?: string): Settings {
         .number()
         .transform(clampContextChars)
         .catch(defaults.maxContextChars),
-      pageModels: perProviderTextSchema.catch({}),
       pageRequestsPerSecond: z
         .number()
         .transform(clampPageRequestRate)
@@ -124,6 +125,13 @@ export function normalizeSettings(value: unknown, locale?: string): Settings {
     .catch(defaults);
 
   const settings: Settings = schema.parse(value);
+  // A choice of an engine that is gone is no choice.
+  for (const task of ENGINE_TASKS) {
+    const chosen = settings.engineFor[task];
+    if (!settings.engines.some((engine) => engine.id === chosen)) {
+      delete settings.engineFor[task];
+    }
+  }
   return settings;
 }
 

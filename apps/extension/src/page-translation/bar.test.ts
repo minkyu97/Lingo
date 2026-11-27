@@ -27,7 +27,7 @@ describe("describeBar", () => {
   it.each<[PageProblem, string, string, string]>([
     [
       "missing_key",
-      "Add an API key to translate pages",
+      "Add a translation engine to translate pages",
       "settings",
       "Open settings",
     ],

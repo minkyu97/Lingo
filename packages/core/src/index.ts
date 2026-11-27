@@ -15,6 +15,20 @@ export {
   type SenseGroup,
 } from "./dictionary.ts";
 export {
+  ENGINE_TASKS,
+  type Engine,
+  type EngineChoices,
+  type EngineTask,
+  engineForTask,
+  engineName,
+  type ModelCapabilities,
+  type ModelInfo,
+  PROVIDER_IDS,
+  type ProviderId,
+  removeEngine,
+  saveEngine,
+} from "./engines.ts";
+export {
   type ChatMessage,
   type ChatRequest,
   type ChatRole,
@@ -58,8 +72,6 @@ export {
   nativeLanguageName,
   normalizeSettings,
   PAGE_REQUEST_RATE_PRESETS,
-  PROVIDER_IDS,
-  type ProviderId,
   perProviderTextSchema,
   type Settings,
   TARGET_LANGUAGES,

@@ -32,6 +32,23 @@
   font: var(--lingo-text-caption);
 }
 
+/* A note that leads into what follows it, with no gap of its own below. */
+.lingo-settings__note--hint {
+  padding-top: 0;
+  padding-bottom: var(--lingo-space-4);
+}
+
+/* A field that is a button: as wide as the panel, with room below it. */
+.lingo-settings__field--action {
+  display: flex;
+  padding-top: var(--lingo-space-8);
+  padding-bottom: var(--lingo-space-16);
+}
+
+.lingo-settings__field--action .lingo-button {
+  flex: 1 1 auto;
+}
+
 .lingo-settings__footer {
   flex: none;
   padding: var(--lingo-space-16);

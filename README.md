@@ -37,7 +37,7 @@ You need [mise](https://mise.jdx.dev) and Chrome 140 or later.
 1. Install the toolchain and the dependencies: `mise install`, then `pnpm install`.
 2. Build the extension: `pnpm build`.
 3. Open `chrome://extensions`, turn on developer mode, choose "Load unpacked", and select `apps/extension/.output/chrome-mv3`.
-4. The settings open in a tab. Under "Translation engine", enter an Anthropic or OpenAI API key. Lingo checks the key with the provider and then stores it in your browser.
+4. The settings open in a tab. Under "Translation engines", add an engine: pick a provider, enter your API key for it, and choose one of the models the key can use. Lingo checks the key with the provider and stores it in your browser. You can add more engines and choose one each for translating, defining, and translating pages.
 5. Select text on any page and press the Lingo button that appears next to it, or press Alt+Shift+L.
 6. To translate a whole page, press the Lingo button in the browser's toolbar and then "Translate", or press Alt+Shift+P. Lingo translates what is on screen and a little beyond it, and goes on as you scroll. "Show original" in the bar at the bottom of the page puts the page back.
 7. The same toolbar button opens the settings, in a panel inside the page.

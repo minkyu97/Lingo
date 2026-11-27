@@ -9,7 +9,6 @@
  * Keys are read from ANTHROPIC_API_KEY and OPENAI_API_KEY, in the environment
  * or in `.env.local` at the repo root. A provider without a key is skipped.
  */
-import Anthropic from "@anthropic-ai/sdk";
 import {
   type CapturedContext,
   type ChatRequest,
@@ -19,7 +18,6 @@ import {
   parseDictionaryEntry,
   prepareLookup,
 } from "@lingo/core";
-import OpenAI from "openai";
 import { createProvider, PROVIDERS } from "../src/index.ts";
 
 const KEY_VARIABLES: Record<ProviderId, string> = {
@@ -64,18 +62,6 @@ function fail(label: string, error: unknown): void {
   failures += 1;
   const reason = error instanceof Error ? error.message : String(error);
   console.log(`  FAIL  ${label}: ${reason}`);
-}
-
-async function modelExists(
-  provider: ProviderId,
-  apiKey: string,
-  model: string,
-): Promise<void> {
-  if (provider === "anthropic") {
-    await new Anthropic({ apiKey }).models.retrieve(model);
-  } else {
-    await new OpenAI({ apiKey }).models.retrieve(model);
-  }
 }
 
 interface Streamed {
@@ -154,19 +140,25 @@ async function defineOnce(
 
 /** The key check must pass a real key and turn down a made-up one. */
 async function checkKeys(provider: ProviderId, apiKey: string): Promise<void> {
-  await createProvider({
+  const models = await createProvider({
     provider,
     apiKey,
     fetch: fetchWithOrigin,
-  }).checkKey();
-  console.log("  ok    key check accepts the real key");
+  }).listModels();
+  console.log(`  ok    the real key lists ${models.length} models`);
+  for (const model of STREAMED_MODELS[provider]) {
+    if (!models.some(({ id }) => id === model)) {
+      throw new Error(`the list lacks ${model}`);
+    }
+  }
+  console.log("  ok    the list has the models that are streamed below");
 
   const rejection = await createProvider({
     provider,
     apiKey: "lingo-smoke-check-not-a-key",
     fetch: fetchWithOrigin,
   })
-    .checkKey()
+    .listModels()
     .then(
       () => undefined,
       (error: unknown) => error,
@@ -174,7 +166,7 @@ async function checkKeys(provider: ProviderId, apiKey: string): Promise<void> {
   if (!(rejection instanceof LLMError) || rejection.kind !== "auth") {
     throw new Error(`a made-up key was not rejected: ${String(rejection)}`);
   }
-  console.log("  ok    key check rejects a made-up key");
+  console.log("  ok    a made-up key is rejected");
 }
 
 for (const provider of PROVIDER_IDS) {
@@ -189,15 +181,6 @@ for (const provider of PROVIDER_IDS) {
     await checkKeys(provider, apiKey);
   } catch (error) {
     fail("key check", error);
-  }
-
-  for (const { id } of PROVIDERS[provider].models) {
-    try {
-      await modelExists(provider, apiKey, id);
-      console.log(`  ok    model ${id} exists`);
-    } catch (error) {
-      fail(`model ${id}`, error);
-    }
   }
 
   for (const model of STREAMED_MODELS[provider]) {

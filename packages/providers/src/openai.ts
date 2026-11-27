@@ -2,6 +2,7 @@ import {
   type ChatRequest,
   LLMError,
   type LLMProvider,
+  type ModelInfo,
   type StreamOptions,
 } from "@lingo/core";
 import OpenAI from "openai";
@@ -12,6 +13,8 @@ export interface OpenAIProviderOptions {
   apiKey: string;
   /** Model ID. Defaults to `OPENAI_DEFAULT_MODEL`. */
   model?: string;
+  /** Merged into every request, over what the adapter sets itself. */
+  parameters?: Record<string, unknown>;
   baseURL?: string;
   maxRetries?: number;
   fetch?: typeof fetch;
@@ -44,7 +47,6 @@ export function createOpenAIProvider(
             role,
             content,
           })),
-          stream: true,
           // Do not keep the user's text on OpenAI's side after the request.
           store: false,
           // Hold the answer to the requested JSON schema where the model can be.
@@ -60,6 +62,9 @@ export function createOpenAIProvider(
                 },
               }
             : {}),
+          ...options.parameters,
+          // Whatever the parameters say, the answer is read as a stream.
+          stream: true,
         },
         { signal },
       );
@@ -85,19 +90,42 @@ export function createOpenAIProvider(
     }
   }
 
-  async function checkKey(): Promise<void> {
+  async function listModels(): Promise<ModelInfo[]> {
     try {
       // Listing models needs a valid key and generates nothing, so it is free.
-      await client.models.list({
+      const page = await client.models.list({
         timeout: KEY_CHECK_TIMEOUT_MS,
         maxRetries: options.maxRetries ?? KEY_CHECK_MAX_RETRIES,
       });
+      return page.data
+        .filter((model) => isTextModel(model.id))
+        .sort((a, b) => b.created - a.created)
+        .map((model) => ({
+          id: model.id,
+          // OpenAI gives a model no name apart from its ID.
+          label: OPENAI_MODELS[model.id]?.label ?? model.id,
+        }));
     } catch (error) {
       throw toLLMError(error);
     }
   }
 
-  return { stream, checkKey };
+  return { stream, listModels };
+}
+
+/** Models that answer text with text start like this. */
+const TEXT_MODEL = /^(gpt-|o\d|chatgpt-|chat-)/;
+
+/** Models of those families that are for something else. */
+const NOT_FOR_TEXT =
+  /audio|realtime|image|transcribe|tts|search|embedding|moderation|live|codex/;
+
+/**
+ * Whether a model can translate. The API lists every model of the account
+ * in one list: speech, images, and embeddings among them.
+ */
+export function isTextModel(id: string): boolean {
+  return TEXT_MODEL.test(id) && !NOT_FOR_TEXT.test(id);
 }
 
 function toLLMError(error: unknown): LLMError {

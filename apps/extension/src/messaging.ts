@@ -120,7 +120,7 @@ const runtimeMessageSchema = z.discriminatedUnion("type", [
   }),
   /**
    * Settings page to background: ask the provider whether it accepts a key.
-   * The answer is a `KeyCheckResult`.
+   * The answer is a `KeyCheck`, which also lists the key's models.
    */
   z.object({
     type: z.literal("check-api-key"),
@@ -145,15 +145,30 @@ export function parseLookupRequest(value: unknown): LookupRequest | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-/**
- * What a provider said about a key. Anything that is not one of these, such
- * as no answer at all, reads as the provider not having been reached.
- */
-export const keyCheckResultSchema = z
-  .enum(["accepted", "rejected", "unreachable"])
-  .catch("unreachable");
+const modelInfoSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  capabilities: z
+    .object({
+      effort: z.boolean().optional(),
+      structuredOutput: z.boolean().optional(),
+    })
+    .optional(),
+});
 
-export type KeyCheckResult = z.infer<typeof keyCheckResultSchema>;
+/**
+ * What a provider said about a key, and the models the key can use when it
+ * was accepted. Anything else, such as no answer at all, reads as the
+ * provider not having been reached.
+ */
+export const keyCheckSchema = z
+  .object({
+    status: z.enum(["accepted", "rejected", "unreachable"]),
+    models: z.array(modelInfoSchema),
+  })
+  .catch({ status: "unreachable", models: [] });
+
+export type KeyCheck = z.infer<typeof keyCheckSchema>;
 
 /** What the top frame did with a `settings-drawer` message. */
 export const drawerAnswerSchema = z.enum(["opened", "closed", "unchanged"]);

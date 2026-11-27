@@ -19,7 +19,7 @@ import { createRateLimiter } from "../src/page-translation/rate-limiter.ts";
 import { createPageSwitch } from "../src/page-translation/switch.ts";
 import { createSettingsDrawer } from "../src/settings-drawer.ts";
 import {
-  loadApiKey,
+  loadEngineKey,
   loadPageTranslationOptions,
   loadSettings,
   restrictStorageToTrustedContexts,
@@ -49,7 +49,7 @@ export default defineBackground(() => {
     if (port.name !== LOOKUP_PORT) return;
     handleLookupPort(port, {
       loadSettings,
-      loadApiKey,
+      loadEngineKey,
       createProvider,
       baseURL,
     });
@@ -62,7 +62,7 @@ export default defineBackground(() => {
     handlePageTranslationPort(port, {
       loadSettings,
       loadOptions: loadPageTranslationOptions,
-      loadApiKey,
+      loadEngineKey,
       createProvider,
       limiter,
       baseURL,

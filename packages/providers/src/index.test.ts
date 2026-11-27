@@ -13,14 +13,6 @@ describe("PROVIDERS", () => {
   it("describes every provider the settings can select", () => {
     expect(Object.keys(PROVIDERS).sort()).toEqual([...PROVIDER_IDS].sort());
   });
-
-  it("lists each default model among the offered models", () => {
-    for (const info of Object.values(PROVIDERS)) {
-      const offered = info.models.map((model) => model.id);
-      expect(offered).toContain(info.defaultModel);
-      expect(offered).toContain(info.defaultPageModel);
-    }
-  });
 });
 
 describe("createProvider", () => {

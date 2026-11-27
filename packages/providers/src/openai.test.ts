@@ -97,6 +97,28 @@ describe("createOpenAIProvider", () => {
     expect(calls[0]?.body).not.toHaveProperty("text");
   });
 
+  it("merges extra parameters into the request, and still streams", async () => {
+    const { fetch, calls } = fakeFetch(() =>
+      sseResponse(fixture("openai-text.sse")),
+    );
+    const provider = createOpenAIProvider({
+      apiKey: "test-key",
+      model: "gpt-next",
+      parameters: { temperature: 0.3, store: true, stream: false },
+      fetch,
+      maxRetries: 0,
+    });
+    expect((await collect(provider, sampleRequest)).join("")).toBe(
+      "안녕하세요",
+    );
+    expect(calls[0]?.body).toMatchObject({
+      model: "gpt-next",
+      temperature: 0.3,
+      store: true,
+      stream: true,
+    });
+  });
+
   it("reports a refusal", async () => {
     const error = await failure(() =>
       sseResponse(fixture("openai-refusal.sse")),
@@ -147,15 +169,35 @@ describe("createOpenAIProvider", () => {
   });
 });
 
-describe("checking a key with OpenAI", () => {
+describe("listing the models of an OpenAI key", () => {
+  const model = (id: string, created: number) => ({
+    id,
+    created,
+    object: "model",
+    owned_by: "system",
+  });
   const models = {
     object: "list",
-    data: [{ id: "gpt-6.2-sol", object: "model", owned_by: "openai" }],
+    data: [
+      model("gpt-5.4-mini", 100),
+      model("tts-1", 400),
+      model("gpt-6.2-sol", 300),
+      model("gpt-image-2", 500),
+      model("text-embedding-3-large", 600),
+      model("o3", 50),
+      model("gpt-realtime-2", 700),
+      model("gpt-6-luna", 200),
+    ],
   };
 
-  it("resolves when the key is accepted, without generating anything", async () => {
+  it("returns the models that answer text, newest first", async () => {
     const { provider, calls } = providerFor(() => jsonResponse(models));
-    await expect(provider.checkKey()).resolves.toBeUndefined();
+    expect(await provider.listModels()).toEqual([
+      { id: "gpt-6.2-sol", label: "GPT-6.2 Sol" },
+      { id: "gpt-6-luna", label: "GPT-6 Luna" },
+      { id: "gpt-5.4-mini", label: "gpt-5.4-mini" },
+      { id: "o3", label: "o3" },
+    ]);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).toBe("GET");
@@ -172,7 +214,7 @@ describe("checking a key with OpenAI", () => {
         },
       }),
     );
-    const error = await provider.checkKey().catch((e) => e);
+    const error = await provider.listModels().catch((e) => e);
     expect(error).toBeInstanceOf(LLMError);
     expect(error.kind).toBe("auth");
   });
@@ -181,7 +223,7 @@ describe("checking a key with OpenAI", () => {
     const { provider } = providerFor(() =>
       errorResponse(503, { error: { message: "Service unavailable" } }),
     );
-    const error = await provider.checkKey().catch((e) => e);
+    const error = await provider.listModels().catch((e) => e);
     expect(error).toBeInstanceOf(LLMError);
     expect(error.kind).not.toBe("auth");
   });
@@ -194,7 +236,7 @@ describe("checking a key with OpenAI", () => {
         throw new TypeError("fetch failed");
       },
     });
-    const error = await provider.checkKey().catch((e) => e);
+    const error = await provider.listModels().catch((e) => e);
     expect(error).toBeInstanceOf(LLMError);
     expect(error.kind).toBe("network");
   });
