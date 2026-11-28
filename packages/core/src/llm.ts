@@ -1,3 +1,5 @@
+import type { ModelInfo } from "./engines.ts";
+
 export type ChatRole = "user" | "assistant";
 
 export interface ChatMessage {
@@ -36,12 +38,13 @@ export interface LLMProvider {
   /** Yields the response text in chunks as the model generates it. */
   stream(request: ChatRequest, options?: StreamOptions): AsyncIterable<string>;
   /**
-   * Asks the provider whether it accepts the API key, without generating
-   * anything. Resolves when it does. Rejects with an `LLMError`: of kind
-   * `auth` when the provider turned the key down, and of any other kind when
-   * the question could not be settled, as when the provider is unreachable.
+   * Lists the models the API key can use, newest first, and generates
+   * nothing. This is also how a key is checked: it rejects with an `LLMError`
+   * of kind `auth` when the provider turned the key down, and of any other
+   * kind when the question could not be settled, as when the provider is
+   * unreachable.
    */
-  checkKey(): Promise<void>;
+  listModels(): Promise<ModelInfo[]>;
 }
 
 /**

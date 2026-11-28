@@ -1,14 +1,13 @@
 import {
   buildPageTranslationRequest,
   createSegmentReader,
+  engineForTask,
   LLMError,
-  type LLMProvider,
   languageName,
-  type ProviderId,
   type Settings,
 } from "@lingo/core";
-import type { CreateProviderOptions } from "@lingo/providers";
 import { PROVIDERS } from "@lingo/providers/catalog";
+import { type EngineDeps, providerForTask } from "../engine-provider.ts";
 import {
   type PageEvent,
   type PageRequest,
@@ -24,15 +23,11 @@ export interface PageTranslationPort {
   onDisconnect: { addListener(listener: () => void): void };
 }
 
-export interface PageTranslationDeps {
+export interface PageTranslationDeps extends EngineDeps {
   loadSettings(): Promise<Settings>;
   loadOptions(): Promise<PageTranslationOptions>;
-  loadApiKey(provider: ProviderId): Promise<string | undefined>;
-  createProvider(options: CreateProviderOptions): Pick<LLMProvider, "stream">;
   /** Shared by every port, so that the rate holds over all tabs and frames. */
   limiter: RateLimiter;
-  /** Overrides the provider's API address. Used by end-to-end tests. */
-  baseURL?(provider: ProviderId): string | undefined;
   pingIntervalMs?: number;
 }
 
@@ -74,18 +69,8 @@ export function handlePageTranslationPort(
     const { batch } = request;
     try {
       const settings = await deps.loadSettings();
-      const apiKey = await deps.loadApiKey(settings.provider);
-      if (!apiKey) throw new LLMError("missing_key", "No API key is set.");
-
-      const provider = deps.createProvider({
-        provider: settings.provider,
-        apiKey,
-        // Pages have a model of their own, apart from the one for lookups.
-        model:
-          settings.pageModels[settings.provider] ??
-          PROVIDERS[settings.provider].defaultPageModel,
-        baseURL: deps.baseURL?.(settings.provider),
-      });
+      // Pages have an engine of their own, apart from the ones for lookups.
+      const { provider } = await providerForTask("page", settings, deps);
       const chunks = provider.stream(
         buildPageTranslationRequest({
           segments: request.segments,
@@ -138,12 +123,14 @@ export function handlePageTranslationPort(
   });
 
   void Promise.all([deps.loadOptions(), deps.loadSettings()]).then(
-    ([options, settings]) =>
+    ([options, settings]) => {
+      const engine = engineForTask(settings, "page");
       post({
         type: "config",
         options,
         targetLanguage: settings.targetLanguage,
-        provider: PROVIDERS[settings.provider].label,
-      }),
+        provider: engine ? PROVIDERS[engine.provider].label : undefined,
+      });
+    },
   );
 }

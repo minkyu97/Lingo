@@ -33,14 +33,14 @@ describe("PageBar", () => {
     render(
       <PageBar
         state="problem"
-        label="Add an API key to translate pages"
+        label="Add a translation engine to translate pages"
         action={{ label: "Open settings", onClick: onFix }}
         onStop={onStop}
       />,
     );
 
     expect(screen.getByRole("status").textContent).toBe(
-      "Add an API key to translate pages",
+      "Add a translation engine to translate pages",
     );
     fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
     expect(onFix).toHaveBeenCalledOnce();

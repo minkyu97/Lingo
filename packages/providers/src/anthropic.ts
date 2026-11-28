@@ -3,6 +3,8 @@ import {
   type ChatRequest,
   LLMError,
   type LLMProvider,
+  type ModelCapabilities,
+  type ModelInfo,
   type StreamOptions,
 } from "@lingo/core";
 import { ANTHROPIC_DEFAULT_MODEL, ANTHROPIC_MODELS } from "./catalog.ts";
@@ -12,12 +14,30 @@ export interface AnthropicProviderOptions {
   apiKey: string;
   /** Model ID. Defaults to `ANTHROPIC_DEFAULT_MODEL`. */
   model?: string;
+  /**
+   * What the provider said the model accepts. Used for a model that the
+   * catalog does not know.
+   */
+  capabilities?: ModelCapabilities;
+  /** Merged into every request, over what the adapter sets itself. */
+  parameters?: Record<string, unknown>;
   baseURL?: string;
   maxRetries?: number;
   fetch?: typeof fetch;
 }
 
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
+
+/** More models than the API has, so that one page holds them all. */
+const MODEL_LIST_LIMIT = 100;
+
+/** The part of a listed model that says what it accepts. */
+interface ListedModel {
+  capabilities?: {
+    effort?: { supported?: boolean };
+    structured_outputs?: { supported?: boolean };
+  };
+}
 
 /** A ceiling, not a target: lookups are short, and a cut-off answer is worse. */
 const MAX_TOKENS = 16000;
@@ -26,7 +46,15 @@ export function createAnthropicProvider(
   options: AnthropicProviderOptions,
 ): LLMProvider {
   const model = options.model ?? ANTHROPIC_DEFAULT_MODEL;
-  const traits = ANTHROPIC_MODELS[model];
+  const known = ANTHROPIC_MODELS[model];
+  const traits = {
+    effort: known?.effort ?? options.capabilities?.effort ?? false,
+    structuredOutput:
+      known?.structuredOutput ??
+      options.capabilities?.structuredOutput ??
+      false,
+    fallbacks: known?.fallbacks ?? false,
+  };
   const client = new Anthropic({
     apiKey: options.apiKey,
     baseURL: options.baseURL,
@@ -43,9 +71,9 @@ export function createAnthropicProvider(
   ): AsyncGenerator<string> {
     const outputConfig = {
       // Lookups are simple, so trade reasoning depth for a faster first token.
-      ...(traits?.effort ? { effort: "low" as const } : {}),
+      ...(traits.effort ? { effort: "low" as const } : {}),
       // Hold the answer to the requested JSON schema where the model can be.
-      ...(traits?.structuredOutput && request.format
+      ...(traits.structuredOutput && request.format
         ? {
             format: {
               type: "json_schema" as const,
@@ -62,10 +90,11 @@ export function createAnthropicProvider(
       ...(Object.keys(outputConfig).length > 0
         ? { output_config: outputConfig }
         : {}),
+      ...options.parameters,
     };
 
     try {
-      const response = traits?.fallbacks
+      const response = traits.fallbacks
         ? client.beta.messages.stream(
             { ...params, betas: [FALLBACK_BETA], fallbacks: "default" },
             { signal },
@@ -90,22 +119,34 @@ export function createAnthropicProvider(
     }
   }
 
-  async function checkKey(): Promise<void> {
+  async function listModels(): Promise<ModelInfo[]> {
     try {
       // Listing models needs a valid key and generates nothing, so it is free.
-      await client.models.list(
-        { limit: 1 },
+      const page = await client.models.list(
+        { limit: MODEL_LIST_LIMIT },
         {
           timeout: KEY_CHECK_TIMEOUT_MS,
           maxRetries: options.maxRetries ?? KEY_CHECK_MAX_RETRIES,
         },
       );
+      // The API lists the newest model first.
+      return page.data.map((model) => {
+        const { capabilities } = model as ListedModel;
+        return {
+          id: model.id,
+          label: model.display_name || model.id,
+          capabilities: capabilities && {
+            effort: capabilities.effort?.supported,
+            structuredOutput: capabilities.structured_outputs?.supported,
+          },
+        };
+      });
     } catch (error) {
       throw toLLMError(error);
     }
   }
 
-  return { stream, checkKey };
+  return { stream, listModels };
 }
 
 function toLLMError(error: unknown): LLMError {

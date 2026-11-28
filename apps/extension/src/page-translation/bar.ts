@@ -38,7 +38,7 @@ export function describeBar(
       };
     case "missing_key":
       return problem(
-        "Add an API key to translate pages",
+        "Add a translation engine to translate pages",
         "settings",
         "Open settings",
       );

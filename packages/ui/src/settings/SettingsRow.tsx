@@ -10,6 +10,8 @@ export interface SettingsRowProps {
   warning?: boolean;
   /** The row leads out of the panel instead of to one of its screens. */
   external?: boolean;
+  /** The row does something in place, so it shows no sign of leading on. */
+  plain?: boolean;
   /** Makes the row a link that opens in a new tab. */
   href?: string;
   onClick?: () => void;
@@ -22,6 +24,7 @@ export function SettingsRow({
   value,
   warning = false,
   external = false,
+  plain = false,
   href,
   onClick,
 }: SettingsRowProps) {
@@ -34,9 +37,11 @@ export function SettingsRow({
           {value}
         </span>
       )}
-      <span className="lingo-settings-row__trailing">
-        <Icon icon={external ? ExternalLink : ChevronRight} />
-      </span>
+      {!plain && (
+        <span className="lingo-settings-row__trailing">
+          <Icon icon={external ? ExternalLink : ChevronRight} />
+        </span>
+      )}
     </>
   );
 

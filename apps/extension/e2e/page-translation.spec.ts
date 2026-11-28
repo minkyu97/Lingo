@@ -5,6 +5,7 @@
  */
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 import {
+  addEngine,
   drawer,
   expect,
   openTestPage,
@@ -39,28 +40,35 @@ interface Progress {
 interface Configuration {
   /** How page translation is tuned, to make a small page act like a large one. */
   tuning?: object;
-  /** Settings to store, as the settings panel would. */
+  /** Settings to store over the ones a test starts with. */
   settings?: object;
-  /** The API keys to store. One for Anthropic unless told otherwise. */
-  apiKeys?: object;
+  /** `false` starts without an engine, as right after an install. */
+  engine?: false;
 }
 
-/** Puts into storage what a test needs to be there before it starts. */
+/**
+ * Puts into storage what a test needs to be there before it starts: one
+ * engine with its key, unless told otherwise.
+ */
 async function configure(
   worker: Worker,
-  {
-    tuning = {},
-    settings = {},
-    apiKeys = { anthropic: "test-key" },
-  }: Configuration = {},
+  { tuning = {}, settings = {}, engine }: Configuration = {},
 ) {
+  const engines =
+    engine === false
+      ? []
+      : [{ id: "opus", provider: "anthropic", model: "claude-opus-5-5" }];
   await worker.evaluate(
     async (items) => {
       const { storage } = (globalThis as unknown as { chrome: ExtensionApi })
         .chrome;
       await storage.local.set(items);
     },
-    { pageTranslation: tuning, settings, apiKeys },
+    {
+      pageTranslation: tuning,
+      settings: { engines, ...settings },
+      engineKeys: engine === false ? {} : { opus: "test-key" },
+    },
   );
 }
 
@@ -424,17 +432,17 @@ test("is turned on from the panel, and off from the page bar", async ({
   await expect(panel.getByText("Translate this page")).toBeVisible();
 });
 
-test("says so in the page bar when there is no API key, and goes on once there is", async ({
+test("says so in the page bar when there is no engine, and goes on once there is", async ({
   context,
   worker,
 }, testInfo) => {
-  await configure(worker, { apiKeys: {} });
+  await configure(worker, { engine: false });
   const page = await openLongPage(context, worker);
 
   await toggleTranslation(worker);
 
   await expect(pageBar(page)).toContainText(
-    "Add an API key to translate pages",
+    "Add a translation engine to translate pages",
   );
   // Nothing is left looking as if it were on its way.
   await expect
@@ -446,10 +454,8 @@ test("says so in the page bar when there is no API key, and goes on once there i
   // The way out is one press away, and translation goes on by itself.
   await pageBar(page).getByRole("button", { name: "Open settings" }).click();
   const panel = drawer(page);
-  await panel.getByRole("button", { name: /^Translation engine/ }).click();
-  await panel.getByLabel("API key").fill("test-key");
-  await panel.getByLabel("API key").press("Enter");
-  await expect(panel.getByText(/^Saved\./)).toBeVisible();
+  await panel.getByRole("button", { name: /^Translation engines/ }).click();
+  await addEngine(panel, { apiKey: "test-key" });
 
   await expect(page.locator("h1")).toHaveText("LONG PAGE");
   await expect(pageBar(page)).toContainText("Translating into English");
@@ -459,10 +465,10 @@ test("stops when the close button of a problem is pressed", async ({
   context,
   worker,
 }) => {
-  await configure(worker, { apiKeys: {} });
+  await configure(worker, { engine: false });
   const page = await openLongPage(context, worker);
   await toggleTranslation(worker);
-  await expect(pageBar(page)).toContainText("Add an API key");
+  await expect(pageBar(page)).toContainText("Add a translation engine");
 
   await pageBar(page).getByRole("button", { name: "Stop translating" }).click();
 
@@ -499,7 +505,7 @@ test("translates the frames inside a page along with it", async ({
   await expect(inner.locator("h1")).toHaveText("Test page");
 });
 
-test("has a model and a request rate of its own in the settings", async ({
+test("uses the engine chosen for pages, and the request rate from the settings", async ({
   context,
   worker,
   extensionId,
@@ -510,29 +516,39 @@ test("has a model and a request rate of its own in the settings", async ({
   const panel = drawer(page);
   const row = (name: RegExp) => panel.getByRole("button", { name });
 
-  // Pages start with the fast model, whatever lookups use.
-  await expect(row(/^Translation engine/)).toContainText("Claude Opus 5.5");
-  await expect(row(/^Model/)).toContainText("Claude Haiku 5.5");
+  await expect(row(/^Translation engines/)).toContainText("1 engine");
   await expect(row(/^Request rate/)).toContainText("3 per second");
   await expect(row(/^Keyboard shortcuts/)).toBeVisible();
 
-  await row(/^Model/).click();
-  await expect(panel.getByRole("heading", { level: 1 })).toHaveText(
-    "Page model",
-  );
-  await page.screenshot({ path: testInfo.outputPath("page-model.png") });
-  await panel.getByRole("radio", { name: /Claude Sonnet 5.5/ }).check();
+  // A second engine starts without a key, also for a provider that has one.
+  await row(/^Translation engines/).click();
+  await panel.getByRole("button", { name: "Add engine" }).click();
+  await expect(panel.getByLabel("API key")).toHaveValue("");
+  await page.screenshot({ path: testInfo.outputPath("add-engine.png") });
   await panel.getByRole("button", { name: "Back" }).click();
-  await expect(row(/^Model/)).toContainText("Claude Sonnet 5.5");
+  await addEngine(panel, { apiKey: "test-key", model: "Claude Sonnet 5.5" });
+
+  // Every task starts on the first engine. Pages get the new one.
+  await expect(row(/^Page translation/)).toContainText("claude-opus-5-5");
+  await row(/^Page translation/).click();
+  await panel.getByRole("radio", { name: /Claude Sonnet 5.5/ }).check();
+  await page.screenshot({ path: testInfo.outputPath("engine-for-pages.png") });
+  await panel.getByRole("button", { name: "Back" }).click();
+  await expect(row(/^Page translation/)).toContainText("Claude Sonnet 5.5");
+  await expect(row(/^Translation/).first()).toContainText("claude-opus-5-5");
+  await page.screenshot({ path: testInfo.outputPath("engines.png") });
+  await panel.getByRole("button", { name: "Back" }).click();
 
   await row(/^Request rate/).click();
+  await panel.getByRole("radio", { name: "7", exact: true }).check();
+  // Any other rate can be typed in.
+  await panel.getByRole("radio", { name: "Other…" }).check();
+  await panel.getByRole("textbox", { name: "Requests per second" }).fill("25");
   await page.screenshot({ path: testInfo.outputPath("request-rate.png") });
-  await panel.getByRole("radio", { name: "5", exact: true }).check();
   await panel.getByRole("button", { name: "Back" }).click();
-  await expect(row(/^Request rate/)).toContainText("5 per second");
-  await page.screenshot({ path: testInfo.outputPath("panel.png") });
+  await expect(row(/^Request rate/)).toContainText("25 per second");
 
-  // The page is translated with the model chosen for pages.
+  // The page is translated by the engine chosen for pages.
   await panel.getByRole("button", { name: "Translate", exact: true }).click();
   await expect(page.locator("h1")).toHaveText("LONG PAGE");
   const [sent] = await recordedRequests(page);

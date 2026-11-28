@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isRuntimeMessage,
-  keyCheckResultSchema,
+  keyCheckSchema,
   MAX_SELECTION_CHARS,
   parseLookupRequest,
 } from "./messaging.ts";
@@ -115,15 +115,24 @@ describe("isRuntimeMessage", () => {
   });
 });
 
-describe("keyCheckResultSchema", () => {
-  it("passes on what the provider said", () => {
-    for (const result of ["accepted", "rejected", "unreachable"]) {
-      expect(keyCheckResultSchema.parse(result)).toBe(result);
-    }
+describe("keyCheckSchema", () => {
+  it("passes on an answer of the background", () => {
+    const answer = {
+      status: "accepted",
+      models: [
+        { id: "m", label: "M", capabilities: { effort: true } },
+        { id: "n", label: "n" },
+      ],
+    };
+    expect(keyCheckSchema.parse(answer)).toEqual(answer);
   });
 
   it("reads anything else as the provider not having been reached", () => {
-    expect(keyCheckResultSchema.parse(undefined)).toBe("unreachable");
-    expect(keyCheckResultSchema.parse({ ok: true })).toBe("unreachable");
+    const unreachable = { status: "unreachable", models: [] };
+    expect(keyCheckSchema.parse(undefined)).toEqual(unreachable);
+    expect(keyCheckSchema.parse("accepted")).toEqual(unreachable);
+    expect(keyCheckSchema.parse({ status: "fine", models: [] })).toEqual(
+      unreachable,
+    );
   });
 });

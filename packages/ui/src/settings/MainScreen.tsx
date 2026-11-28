@@ -14,18 +14,11 @@ import { SettingsRow } from "./SettingsRow.tsx";
 import type { SettingsPanelProps } from "./types.ts";
 
 /** The screens a row of the main screen can lead to. */
-export type DetailScreen =
-  | "engine"
-  | "language"
-  | "context"
-  | "pageModel"
-  | "requestRate";
+export type DetailScreen = "engines" | "language" | "context" | "requestRate";
 
 /** The list of settings, each with its current value. */
 export function MainScreen({
   settings,
-  providers,
-  apiKeys,
   shortcuts,
   version,
   sourceUrl,
@@ -34,16 +27,7 @@ export function MainScreen({
   onClose,
   onOpen,
 }: SettingsPanelProps & { onOpen: (screen: DetailScreen) => void }) {
-  const provider = providers[settings.provider];
-  const model = settings.models[settings.provider] ?? provider.defaultModel;
-  // A model ID that was typed in by hand has no label, so it shows as it is.
-  const modelLabel =
-    provider.models.find(({ id }) => id === model)?.label ?? model;
-  const pageModel =
-    settings.pageModels[settings.provider] ?? provider.defaultPageModel;
-  const pageModelLabel =
-    provider.models.find(({ id }) => id === pageModel)?.label ?? pageModel;
-  const hasKey = apiKeys[settings.provider] !== undefined;
+  const count = settings.engines.length;
   const context = settings.contextAwareness
     ? `On · ${settings.maxContextChars.toLocaleString("en-US")} chars`
     : "Off";
@@ -70,10 +54,12 @@ export function MainScreen({
         )}
         <SettingsRow
           icon={Sparkles}
-          label="Translation engine"
-          value={hasKey ? modelLabel : "Not set"}
-          warning={!hasKey}
-          onClick={() => onOpen("engine")}
+          label="Translation engines"
+          value={
+            count === 0 ? "Not set" : `${count} engine${count === 1 ? "" : "s"}`
+          }
+          warning={count === 0}
+          onClick={() => onOpen("engines")}
         />
         <hr className="lingo-divider" />
         <h2 className="lingo-group-label">Lookup</h2>
@@ -85,12 +71,6 @@ export function MainScreen({
         />
         <hr className="lingo-divider" />
         <h2 className="lingo-group-label">Pages</h2>
-        <SettingsRow
-          icon={Sparkles}
-          label="Model"
-          value={pageModelLabel}
-          onClick={() => onOpen("pageModel")}
-        />
         <SettingsRow
           icon={Gauge}
           label="Request rate"

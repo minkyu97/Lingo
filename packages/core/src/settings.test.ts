@@ -37,30 +37,65 @@ describe("normalizeSettings", () => {
 
   it("keeps valid stored values", () => {
     const stored = {
-      provider: "openai",
-      models: { openai: "some-model" },
+      engines: [
+        { id: "a", provider: "openai", model: "gpt-6.2-sol" },
+        {
+          id: "b",
+          provider: "anthropic",
+          model: "claude-fable-5-2",
+          modelLabel: "Claude Fable 5.2",
+          name: "Dictionary",
+          capabilities: { effort: true, structuredOutput: true },
+          parameters: { temperature: 0.3 },
+        },
+      ],
+      engineFor: { translate: "a", define: "b" },
       targetLanguage: "ja",
       contextAwareness: false,
       maxContextChars: 500,
-      pageModels: { openai: "some-fast-model" },
       pageRequestsPerSecond: 5,
     };
     expect(normalizeSettings(stored, "ko")).toEqual(stored);
   });
 
-  it("fills in what settings stored before a new one lack", () => {
-    const stored = {
-      provider: "openai",
-      models: {},
-      targetLanguage: "ja",
-      contextAwareness: true,
-      maxContextChars: 1000,
-    };
-    expect(normalizeSettings(stored, "ko")).toEqual({
-      ...stored,
-      pageModels: {},
-      pageRequestsPerSecond: 3,
+  it("leaves out an engine that is unusable, and keeps the rest", () => {
+    const good = { id: "a", provider: "openai", model: "gpt-6.2-sol" };
+    const { engines } = normalizeSettings({
+      engines: [
+        { id: "x", provider: "nope", model: "m" },
+        { id: "y", provider: "openai", model: "  " },
+        { provider: "openai", model: "m" },
+        "not an engine",
+        good,
+        // The same ID again.
+        { ...good, model: "other" },
+      ],
     });
+    expect(engines).toEqual([good]);
+  });
+
+  it("trims model IDs, and drops what is wrong inside an engine", () => {
+    const { engines } = normalizeSettings({
+      engines: [
+        {
+          id: "a",
+          provider: "anthropic",
+          model: " m ",
+          name: "  ",
+          capabilities: "all",
+          parameters: [1, 2],
+        },
+      ],
+    });
+    expect(engines).toEqual([{ id: "a", provider: "anthropic", model: "m" }]);
+  });
+
+  it("forgets the choice of an engine that is gone", () => {
+    const settings = normalizeSettings({
+      engines: [{ id: "a", provider: "openai", model: "m" }],
+      engineFor: { translate: "a", define: "gone", page: 5 },
+    });
+    expect(settings.engineFor).toEqual({ translate: "a" });
   });
 
   it("keeps the request rate for pages within what a provider can take", () => {
@@ -70,7 +105,8 @@ describe("normalizeSettings", () => {
     expect(rate(1)).toBe(1);
     expect(rate(0)).toBe(1);
     expect(rate(2.4)).toBe(2);
-    expect(rate(500)).toBe(10);
+    expect(rate(25)).toBe(25);
+    expect(rate(500)).toBe(100);
     expect(rate("fast")).toBe(3);
     // Every rate offered in settings is one that is kept as it is.
     for (const preset of PAGE_REQUEST_RATE_PRESETS) {
@@ -81,22 +117,16 @@ describe("normalizeSettings", () => {
   it("replaces invalid fields one by one", () => {
     const settings = normalizeSettings(
       {
-        provider: "nope",
-        models: { anthropic: "  ", openai: 5, other: "x" },
+        engines: "many",
+        engineFor: "all",
         targetLanguage: "not a tag",
         contextAwareness: "yes",
         maxContextChars: "many",
-        pageModels: "fast",
         pageRequestsPerSecond: null,
       },
       "ko",
     );
     expect(settings).toEqual(defaultSettings("ko"));
-  });
-
-  it("trims model IDs", () => {
-    const settings = normalizeSettings({ models: { anthropic: " m " } });
-    expect(settings.models).toEqual({ anthropic: "m" });
   });
 
   it("keeps the context length within its limits", () => {

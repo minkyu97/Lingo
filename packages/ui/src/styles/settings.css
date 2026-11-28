@@ -32,6 +32,23 @@
   font: var(--lingo-text-caption);
 }
 
+/* A note that leads into what follows it, with no gap of its own below. */
+.lingo-settings__note--hint {
+  padding-top: 0;
+  padding-bottom: var(--lingo-space-4);
+}
+
+/* A field that is a button: as wide as the panel, with room below it. */
+.lingo-settings__field--action {
+  display: flex;
+  padding-top: var(--lingo-space-8);
+  padding-bottom: var(--lingo-space-16);
+}
+
+.lingo-settings__field--action .lingo-button {
+  flex: 1 1 auto;
+}
+
 .lingo-settings__footer {
   flex: none;
   padding: var(--lingo-space-16);
@@ -124,6 +141,106 @@
   display: flex;
   flex: none;
   color: var(--lingo-muted);
+}
+
+/* Engine list: rows with a handle to drag them into order. */
+
+.lingo-engine-list {
+  position: relative;
+}
+
+.lingo-engine-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lingo-engine-row,
+.lingo-engine-list__lifted {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  color: var(--lingo-fg);
+  font: var(--lingo-text-body);
+}
+
+.lingo-engine-row:hover {
+  background: var(--lingo-subtle);
+}
+
+/* Where a row came from, while it is being dragged. */
+.lingo-engine-row[data-dragging="true"] {
+  opacity: 0.35;
+}
+
+.lingo-engine-row__handle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 100%;
+  padding-left: var(--lingo-space-4);
+  color: var(--lingo-muted);
+  cursor: grab;
+  /* Dragging the handle moves the row, and must not scroll the panel. */
+  touch-action: none;
+}
+
+.lingo-engine-row__open {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--lingo-space-12);
+  min-width: 0;
+  height: 100%;
+  padding-right: var(--lingo-space-12);
+  text-align: left;
+}
+
+.lingo-engine-row__handle:focus-visible,
+.lingo-engine-row__open:focus-visible {
+  outline-offset: -2px;
+}
+
+.lingo-engine-list__line {
+  position: absolute;
+  right: var(--lingo-space-16);
+  left: var(--lingo-space-16);
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--lingo-accent);
+  pointer-events: none;
+}
+
+/* The row that follows the pointer. */
+.lingo-engine-list__lifted {
+  position: absolute;
+  right: var(--lingo-space-8);
+  left: var(--lingo-space-8);
+  border: 1px solid var(--lingo-border);
+  border-radius: var(--lingo-radius-md);
+  background: var(--lingo-bg);
+  box-shadow: var(--lingo-shadow-popover);
+  cursor: grabbing;
+  pointer-events: none;
+}
+
+.lingo-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Several quiet buttons side by side. */
+.lingo-settings__field--buttons {
+  display: flex;
+  gap: var(--lingo-space-12);
+  padding-bottom: var(--lingo-space-16);
 }
 
 /* Action row: a row that ends in a button. */

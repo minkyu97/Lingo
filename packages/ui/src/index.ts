@@ -17,6 +17,7 @@ export {
   type SegmentedControlProps,
 } from "./controls/SegmentedControl.tsx";
 export { Switch, type SwitchProps } from "./controls/Switch.tsx";
+export { TextArea, type TextAreaProps } from "./controls/TextArea.tsx";
 export { TextButton, type TextButtonProps } from "./controls/TextButton.tsx";
 export { TextField, type TextFieldProps } from "./controls/TextField.tsx";
 export { Logo, type LogoProps } from "./Logo.tsx";
@@ -38,7 +39,7 @@ export {
 } from "./page/placeholder.ts";
 export { SettingsPanel } from "./settings/SettingsPanel.tsx";
 export type {
-  KeyStatus,
+  KeyCheck,
   PageSwitch,
   ProviderChoice,
   SettingsPanelProps,

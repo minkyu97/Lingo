@@ -1,7 +1,8 @@
 /**
- * What a settings screen needs to know about each provider: its name, its
- * models, and where to get a key. This module imports no provider SDK, so UI
- * code can use it without bundling one.
+ * What is known about each provider without asking it: its name, where to
+ * get a key, and what the models Lingo knows by name accept. The models a
+ * key can use are asked of the provider. This module imports no provider
+ * SDK, so UI code can use it without bundling one.
  */
 import type { ProviderId } from "@lingo/core";
 
@@ -16,9 +17,9 @@ export interface AnthropicModelTraits {
 }
 
 /**
- * Anthropic models offered in settings. Request parameters that some models
- * reject are sent only to models listed here; a model ID typed in by hand
- * gets a plain request.
+ * Anthropic models that Lingo knows by name. Request parameters that some
+ * models reject are sent to these, and to models whose provider said they
+ * accept them. Any other model gets a plain request.
  */
 export const ANTHROPIC_MODELS: Readonly<Record<string, AnthropicModelTraits>> =
   {
@@ -44,12 +45,6 @@ export const ANTHROPIC_MODELS: Readonly<Record<string, AnthropicModelTraits>> =
 
 export const ANTHROPIC_DEFAULT_MODEL = "claude-opus-5-5";
 
-/**
- * The model that translates whole pages unless another is chosen. A page
- * takes many requests, and the reader waits for each, so it is the fast one.
- */
-export const ANTHROPIC_DEFAULT_PAGE_MODEL = "claude-haiku-5-5";
-
 export interface OpenAIModelTraits {
   label: string;
   /** Can be held to a JSON schema with `text.format`. */
@@ -57,8 +52,8 @@ export interface OpenAIModelTraits {
 }
 
 /**
- * OpenAI models offered in settings. As with Anthropic, parameters that some
- * models reject are sent only to models listed here.
+ * OpenAI models that Lingo knows by name. OpenAI does not say what a model
+ * accepts, so parameters that some models reject are sent only to these.
  */
 export const OPENAI_MODELS: Readonly<Record<string, OpenAIModelTraits>> = {
   "gpt-6.2-sol": { label: "GPT-6.2 Sol", structuredOutput: true },
@@ -68,20 +63,8 @@ export const OPENAI_MODELS: Readonly<Record<string, OpenAIModelTraits>> = {
 
 export const OPENAI_DEFAULT_MODEL = "gpt-6.2-sol";
 
-/**
- * The model that translates whole pages unless another is chosen. Here it is
- * the default for lookups: in a live run on 2026-11-25, neither of the other
- * two models translated a page faster.
- */
-export const OPENAI_DEFAULT_PAGE_MODEL = "gpt-6.2-sol";
-
 export interface ProviderInfo {
   label: string;
-  defaultModel: string;
-  /** The model for translating whole pages when none is chosen. */
-  defaultPageModel: string;
-  /** Models to offer in settings. Other model IDs can still be used. */
-  models: readonly { id: string; label: string }[];
   /** Where a user creates an API key. */
   keysUrl: string;
 }
@@ -89,22 +72,10 @@ export interface ProviderInfo {
 export const PROVIDERS: Readonly<Record<ProviderId, ProviderInfo>> = {
   anthropic: {
     label: "Anthropic",
-    defaultModel: ANTHROPIC_DEFAULT_MODEL,
-    defaultPageModel: ANTHROPIC_DEFAULT_PAGE_MODEL,
-    models: modelList(ANTHROPIC_MODELS),
     keysUrl: "https://platform.claude.com/settings/keys",
   },
   openai: {
     label: "OpenAI",
-    defaultModel: OPENAI_DEFAULT_MODEL,
-    defaultPageModel: OPENAI_DEFAULT_PAGE_MODEL,
-    models: modelList(OPENAI_MODELS),
     keysUrl: "https://platform.openai.com/api-keys",
   },
 };
-
-function modelList(
-  models: Readonly<Record<string, { label: string }>>,
-): { id: string; label: string }[] {
-  return Object.entries(models).map(([id, { label }]) => ({ id, label }));
-}

@@ -189,11 +189,45 @@ export async function recordedRequests(page: Page): Promise<RecordedRequest[]> {
   return (await page.request.get(`${SERVER}/requests`)).json();
 }
 
-/** What a test changes in the settings before it looks something up. */
-export interface Setup {
+/** A page or a frame that shows the settings. */
+type SettingsView = Pick<Page, "getByRole" | "getByLabel" | "getByText">;
+
+/** An engine to add in the settings. */
+export interface NewEngine {
   /** The provider to switch to. Anthropic is the default. */
   provider?: "OpenAI";
   apiKey: string;
+  /** The model to pick, by the name the list shows. */
+  model?: string;
+}
+
+/**
+ * Adds an engine the way a user would, starting from the list of engines:
+ * the key is entered and checked, a model is picked from the list that the
+ * key brought, and "Add engine" is pressed.
+ */
+export async function addEngine(view: SettingsView, engine: NewEngine) {
+  await view.getByRole("button", { name: "Add engine" }).click();
+  const provider = engine.provider ?? "Anthropic";
+  if (engine.provider) {
+    await view.getByRole("button", { name: provider, exact: true }).click();
+  }
+  await view.getByLabel("API key").fill(engine.apiKey);
+  await view.getByLabel("API key").press("Enter");
+  await expect(view.getByText(`${provider} accepted this key.`)).toBeVisible();
+
+  const model =
+    engine.model ?? (engine.provider ? "GPT-6.2 Sol" : "Claude Opus 5.5");
+  await view.getByRole("radio", { name: model, exact: true }).check();
+  await view.getByRole("button", { name: "Add engine" }).click();
+  // Back at the list, which now has the engine.
+  await expect(
+    view.getByRole("button", { name: new RegExp(`^${model}`) }),
+  ).toBeVisible();
+}
+
+/** What a test changes in the settings before it looks something up. */
+export interface Setup extends NewEngine {
   /** The English name of the language to translate into. */
   language?: string;
   /** `false` turns context awareness off. */
@@ -215,15 +249,8 @@ export async function setUp(
     settings.getByRole("button", { name: new RegExp(`^${name}`) });
   const back = () => settings.getByRole("button", { name: "Back" }).click();
 
-  await row("Translation engine").click();
-  if (setup.provider) {
-    await settings
-      .getByRole("button", { name: setup.provider, exact: true })
-      .click();
-  }
-  await settings.getByLabel("API key").fill(setup.apiKey);
-  await settings.getByLabel("API key").press("Enter");
-  await expect(settings.getByText(/^Saved\./)).toBeVisible();
+  await row("Translation engines").click();
+  await addEngine(settings, setup);
   await back();
 
   if (setup.language) {

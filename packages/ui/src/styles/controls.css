@@ -63,6 +63,11 @@
   color: var(--lingo-fg);
 }
 
+.lingo-text-button--danger,
+.lingo-text-button--danger:hover {
+  color: var(--lingo-danger);
+}
+
 /* Icon button */
 
 .lingo-icon-button {
@@ -303,6 +308,44 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Text area */
+
+.lingo-text-area {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  padding: var(--lingo-space-8) var(--lingo-space-12);
+  border: 1px solid var(--lingo-border);
+  border-radius: var(--lingo-radius-sm);
+  background: var(--lingo-bg);
+  color: var(--lingo-fg);
+  font:
+    13px / 20px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  resize: vertical;
+  outline: none;
+}
+
+.lingo-text-area:focus {
+  border-color: var(--lingo-accent);
+}
+
+.lingo-text-area[aria-invalid="true"] {
+  border-color: var(--lingo-danger);
+}
+
+.lingo-text-area::placeholder {
+  color: var(--lingo-muted);
+}
+
+.lingo-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Search field */

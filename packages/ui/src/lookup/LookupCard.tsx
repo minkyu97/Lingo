@@ -66,7 +66,7 @@ const CONTEXT_LABELS: Record<ContextLevel, string> = {
 
 /** Messages for errors the user can do something about. */
 const ERROR_MESSAGES: Partial<Record<LLMErrorKind, string>> = {
-  missing_key: "Add an API key in settings to start using Lingo.",
+  missing_key: "Add a translation engine in settings to start using Lingo.",
   auth: "The provider rejected your API key. Check it in settings.",
   rate_limit: "The provider is limiting your requests. Try again in a moment.",
   refusal: "The model declined this request.",

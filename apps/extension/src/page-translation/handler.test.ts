@@ -1,12 +1,12 @@
 import {
   type ChatRequest,
   defaultSettings,
+  type Engine,
   LLMError,
   type LLMProvider,
   type Settings,
 } from "@lingo/core";
 import type { CreateProviderOptions } from "@lingo/providers";
-import { PROVIDERS } from "@lingo/providers/catalog";
 import { describe, expect, it, vi } from "vitest";
 import {
   handlePageTranslationPort,
@@ -49,6 +49,19 @@ function providerYielding(...chunks: string[]): StreamingProvider {
   };
 }
 
+const opus: Engine = {
+  id: "opus",
+  provider: "anthropic",
+  model: "claude-opus-5-5",
+};
+const luna: Engine = {
+  id: "luna",
+  provider: "openai",
+  model: "gpt-6-luna",
+  capabilities: { structuredOutput: true },
+  parameters: { temperature: 0.3 },
+};
+
 interface Setup {
   settings?: Partial<Settings>;
   options?: Partial<PageTranslationOptions>;
@@ -61,9 +74,13 @@ function setup({ settings, options, apiKey = "key", provider }: Setup = {}) {
   const requests: ChatRequest[] = [];
   const inner = provider ?? providerYielding('<seg id="1">안녕</seg>');
   const deps: PageTranslationDeps = {
-    loadSettings: async () => ({ ...defaultSettings("ko"), ...settings }),
+    loadSettings: async () => ({
+      ...defaultSettings("ko"),
+      engines: [opus],
+      ...settings,
+    }),
     loadOptions: async () => pageTranslationOptionsSchema.parse(options ?? {}),
-    loadApiKey: async () => apiKey ?? undefined,
+    loadEngineKey: async (id) => (apiKey ? `${apiKey}-${id}` : undefined),
     createProvider: (providerOptions) => {
       created.push(providerOptions);
       return {
@@ -139,32 +156,41 @@ describe("handlePageTranslationPort", () => {
     );
   });
 
-  it("uses the provider from the settings, and its model for pages", async () => {
+  it("uses the engine chosen for pages, which lookups need not share", async () => {
     const { events, send, created } = setup({
       settings: {
-        provider: "openai",
-        // The model for lookups is not the one for pages.
-        models: { openai: "gpt-6.2-sol" },
-        pageModels: { openai: "gpt-6-luna" },
+        engines: [opus, luna],
+        engineFor: { translate: "opus", define: "opus", page: "luna" },
       },
     });
     send(translate);
     await finished(events);
-    expect(created[0]).toMatchObject({
+    expect(created[0]).toEqual({
       provider: "openai",
-      apiKey: "key",
+      apiKey: "key-luna",
       model: "gpt-6-luna",
+      capabilities: { structuredOutput: true },
+      parameters: { temperature: 0.3 },
+      baseURL: undefined,
     });
   });
 
-  it("uses the provider's fast model when none is chosen for pages", async () => {
-    const { events, send, created } = setup({
-      settings: { models: { anthropic: "claude-opus-5-5" } },
+  it("names the provider of that engine when the port opens", async () => {
+    const { events } = setup({
+      settings: { engines: [opus, luna], engineFor: { page: "luna" } },
     });
+    await vi.waitFor(() => expect(events).toHaveLength(1));
+    expect(events[0]).toMatchObject({ type: "config", provider: "OpenAI" });
+  });
+
+  it("names no provider before the first engine is added", async () => {
+    const { events, send } = setup({ settings: { engines: [] } });
+    await vi.waitFor(() => expect(events).toHaveLength(1));
+    expect(events[0]).toMatchObject({ type: "config", provider: undefined });
+
     send(translate);
     await finished(events);
-    expect(created[0]?.model).toBe(PROVIDERS.anthropic.defaultPageModel);
-    expect(created[0]?.model).not.toBe("claude-opus-5-5");
+    expect(events.at(-1)).toMatchObject({ type: "error", kind: "missing_key" });
   });
 
   it("serves several requests on one port at the same time", async () => {

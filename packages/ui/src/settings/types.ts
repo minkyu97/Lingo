@@ -1,50 +1,44 @@
-import type { ProviderId, Settings } from "@lingo/core";
+import type { Engine, ModelInfo, ProviderId, Settings } from "@lingo/core";
 
 /** What a settings screen needs to know about one provider. */
 export interface ProviderChoice {
   label: string;
-  defaultModel: string;
-  /** The model for translating whole pages when none is chosen. */
-  defaultPageModel: string;
-  /** Models to offer. Any other model ID can still be typed in. */
-  models: readonly { id: string; label: string }[];
   /** Where a user creates an API key. */
   keysUrl: string;
 }
 
 /**
- * What became of the key last entered for the selected provider.
+ * What a provider said about an API key, and the models the key can use.
  *
- * - `idle`: nothing to report.
- * - `checking`: the provider is being asked whether it accepts the key.
- * - `saved`: the provider accepted the key, and it was stored.
- * - `rejected`: the provider refused the key, so it was not stored.
- * - `unreachable`: the provider could not be asked, so it was not stored.
+ * - `accepted`: the provider accepted the key.
+ * - `rejected`: the provider refused the key.
+ * - `unreachable`: the provider could not be asked.
  */
-export type KeyStatus =
-  | "idle"
-  | "checking"
-  | "saved"
-  | "rejected"
-  | "unreachable";
+export interface KeyCheck {
+  status: "accepted" | "rejected" | "unreachable";
+  /** Newest first. Empty unless the key was accepted. */
+  models: ModelInfo[];
+}
 
 export interface SettingsPanelProps {
   settings: Settings;
   providers: Readonly<Record<ProviderId, ProviderChoice>>;
-  /** The stored API key of each provider that has one. */
-  apiKeys: Partial<Record<ProviderId, string>>;
-  keyStatus: KeyStatus;
+  /** The stored API key of each engine that has one, by engine ID. */
+  engineKeys: Readonly<Record<string, string>>;
   /** The shortcuts that are set, as the platform writes them. */
   shortcuts: readonly string[];
   version: string;
   sourceUrl: string;
   /** Called with the whole settings each time one of them changes. */
   onSettingsChange: (settings: Settings) => void;
+  /** Asks a provider about a key. It lists the models the key can use. */
+  onCheckKey: (provider: ProviderId, key: string) => Promise<KeyCheck>;
   /**
-   * Called with a key to check and store, when the key field is left or
-   * Enter is pressed in it. An empty key means: remove the stored one.
+   * Called with an engine to add, or to store in place of the one with the
+   * same ID, and with its API key.
    */
-  onApiKeySubmit: (provider: ProviderId, key: string) => void;
+  onEngineSave: (engine: Engine, key: string) => void;
+  onEngineRemove: (engineId: string) => void;
   onOpenShortcuts: () => void;
   /** Leave out where the panel cannot be closed, such as a page of its own. */
   onClose?: () => void;
@@ -62,5 +56,5 @@ export interface PageSwitch {
   onToggle: () => void;
 }
 
-/** The props of a screen that is reached from the main one. */
+/** The props of a screen that is reached from another one. */
 export type DetailScreenProps = SettingsPanelProps & { onBack: () => void };

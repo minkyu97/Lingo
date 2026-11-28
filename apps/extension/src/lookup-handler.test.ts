@@ -1,6 +1,7 @@
 import {
   type ChatRequest,
   defaultSettings,
+  type Engine,
   LLMError,
   type LLMProvider,
   type Settings,
@@ -44,8 +45,22 @@ function providerYielding(...chunks: string[]): StreamingProvider {
   };
 }
 
+const opus: Engine = {
+  id: "opus",
+  provider: "anthropic",
+  model: "claude-opus-5-5",
+};
+const luna: Engine = {
+  id: "luna",
+  provider: "openai",
+  model: "gpt-6-luna",
+  capabilities: { structuredOutput: true },
+  parameters: { temperature: 0.3 },
+};
+
 interface Setup {
   settings?: Partial<Settings>;
+  /** The key of every engine. `null` for engines without a key. */
   apiKey?: string | null;
   provider?: StreamingProvider;
   baseURL?: LookupDeps["baseURL"];
@@ -56,8 +71,12 @@ function setup({ settings, apiKey = "key", provider, baseURL }: Setup = {}) {
   const requests: ChatRequest[] = [];
   const inner = provider ?? providerYielding("강", "둑");
   const deps: LookupDeps = {
-    loadSettings: async () => ({ ...defaultSettings("ko"), ...settings }),
-    loadApiKey: async () => apiKey ?? undefined,
+    loadSettings: async () => ({
+      ...defaultSettings("ko"),
+      engines: [opus],
+      ...settings,
+    }),
+    loadEngineKey: async (id) => (apiKey ? `${apiKey}-${id}` : undefined),
     createProvider: (options) => {
       created.push(options);
       return {
@@ -108,29 +127,59 @@ describe("handleLookupPort", () => {
     expect(created).toEqual([
       {
         provider: "anthropic",
-        apiKey: "key",
-        model: undefined,
+        apiKey: "key-opus",
+        model: "claude-opus-5-5",
+        capabilities: undefined,
+        parameters: undefined,
         baseURL: undefined,
       },
     ]);
   });
 
-  it("uses the configured provider, model, and language", async () => {
+  it("uses the engine chosen for the mode, and the configured language", async () => {
     const { send, events, created, requests } = setup({
       settings: {
-        provider: "openai",
-        models: { openai: "gpt-6-luna" },
+        engines: [opus, luna],
+        engineFor: { translate: "luna" },
         targetLanguage: "ja",
       },
     });
     send(start);
     await settled(events);
 
-    expect(created[0]).toMatchObject({
+    expect(created[0]).toEqual({
       provider: "openai",
+      apiKey: "key-luna",
       model: "gpt-6-luna",
+      capabilities: { structuredOutput: true },
+      parameters: { temperature: 0.3 },
+      baseURL: undefined,
     });
     expect(requests[0]?.system).toContain("Japanese");
+  });
+
+  it("defines with the engine for definitions, which may be another one", async () => {
+    const { send, events, created } = setup({
+      settings: { engines: [opus, luna], engineFor: { translate: "luna" } },
+    });
+    send({ ...start, mode: "define" });
+    await settled(events);
+    // None is chosen for definitions, so the first engine does them.
+    expect(created[0]).toMatchObject({ model: "claude-opus-5-5" });
+  });
+
+  it("asks for an engine before the first one is added", async () => {
+    const { send, events, created } = setup({ settings: { engines: [] } });
+    send(start);
+    await settled(events);
+    expect(events).toEqual([
+      {
+        type: "error",
+        kind: "missing_key",
+        message: "No translation engine is set up.",
+      },
+    ]);
+    expect(created).toEqual([]);
   });
 
   it("sends only the selection when context awareness is off", async () => {
@@ -234,8 +283,8 @@ describe("handleLookupPort", () => {
     let release = () => {};
     const fake = fakePort();
     handleLookupPort(fake.port, {
-      loadSettings: async () => defaultSettings("ko"),
-      loadApiKey: async () => "key",
+      loadSettings: async () => ({ ...defaultSettings("ko"), engines: [opus] }),
+      loadEngineKey: async () => "key",
       createProvider: () => ({
         async *stream() {
           await new Promise<void>((resolve) => {
