@@ -174,7 +174,8 @@ afterEach(() => {
 
 describe("createPageTranslator", () => {
   it("translates text once it is near the viewport", () => {
-    startWith('<p id="a">Hello</p><p id="b">Far away</p>');
+    // Too little fits into a request for the two paragraphs to share one.
+    startWith('<p id="a">Hello</p><p id="b">Far away</p>', { batchChars: 10 });
     expect(background.sent).toEqual([]);
 
     show("#a");
@@ -195,20 +196,140 @@ describe("createPageTranslator", () => {
     expect(background.permits()).toBe(1);
   });
 
-  it("puts what is near into one request, in page order", () => {
-    startWith('<h1>Title</h1><p>One <b>bold</b> word</p><p id="far">Far</p>');
-    show("h1, p:not(#far)");
+  it("puts a run of the page into one request, in page order", () => {
+    startWith("<h1>Title</h1><p>One <b>bold</b> word</p><p>Last</p>");
+    show("p");
 
     const request = background.permit();
     expect(request?.segments).toEqual([
       { id: 1, text: "Title" },
       { id: 2, text: "One <g1>bold</g1> word" },
+      { id: 3, text: "Last" },
     ]);
-    background.answer(request, ["제목", "<g1>굵은</g1> 낱말 하나"]);
+    background.answer(request, ["제목", "<g1>굵은</g1> 낱말 하나", "끝"]);
 
     expect(document.body.innerHTML).toBe(
-      '<h1>제목</h1><p><b>굵은</b> 낱말 하나</p><p id="far">Far</p>',
+      "<h1>제목</h1><p><b>굵은</b> 낱말 하나</p><p>끝</p>",
     );
+  });
+
+  it("asks for a whole run when a part of it is near", () => {
+    startWith('<p id="a">Near</p><p id="b">Far</p>');
+    show("#a");
+
+    const request = background.permit();
+    expect(request?.segments).toEqual([
+      { id: 1, text: "Near" },
+      { id: 2, text: "Far" },
+    ]);
+    // What is on its way shows as waiting, also where it is not near.
+    expect(pending).toEqual(new Set(["Near", "Far"]));
+    background.answer(request, ["가까이", "멀리"]);
+
+    expect(document.body.innerHTML).toBe(
+      '<p id="a">가까이</p><p id="b">멀리</p>',
+    );
+    expect(pending.size).toBe(0);
+    // Coming near later, it needs nothing more.
+    show("#b");
+    expect(background.permits()).toBe(1);
+  });
+
+  it("asks the same requests wherever the page is entered", () => {
+    const html =
+      '<p id="a">Alpha one</p><p id="b">Beta two</p><p id="c">Gamma three</p><p id="d">Delta four</p>';
+    /** The requests of a visit that sees the paragraphs in this order. */
+    const visit = (order: string[]) => {
+      startWith(html, { batchChars: 22 });
+      const requests: string[] = [];
+      for (const id of order) {
+        show(`#${id}`);
+        if (background.permits() === background.translations().length) continue;
+        const request = background.permit();
+        requests.push(JSON.stringify(request?.segments));
+        background.answer(
+          request,
+          (request?.segments ?? []).map(({ text }) => text.toUpperCase()),
+        );
+      }
+      translator.stop();
+      return requests.sort();
+    };
+
+    const fromTop = visit(["a", "b", "c", "d"]);
+    expect(fromTop).toEqual([
+      JSON.stringify([
+        { id: 1, text: "Alpha one" },
+        { id: 2, text: "Beta two" },
+      ]),
+      JSON.stringify([
+        { id: 1, text: "Gamma three" },
+        { id: 2, text: "Delta four" },
+      ]),
+    ]);
+    expect(visit(["d", "c", "b", "a"])).toEqual(fromTop);
+    expect(visit(["b", "c"])).toEqual(fromTop);
+  });
+
+  it("sends a text with its run although another run has answered it", () => {
+    startWith(
+      '<p id="a">Reply</p><p id="b">First text</p><p id="c">Other words</p><p id="d">Reply</p>',
+      { batchChars: 16 },
+    );
+    show("#a");
+    const first = background.permit();
+    expect(first?.segments).toEqual([
+      { id: 1, text: "Reply" },
+      { id: 2, text: "First text" },
+    ]);
+    background.answer(first, ["답글", "첫 글"]);
+
+    // The second "Reply" is translated from the first answer. Its run is
+    // asked for as if it were not, so that the request does not depend on
+    // which run came first.
+    show("#c, #d");
+    expect(document.querySelector("#d")?.textContent).toBe("답글");
+    const second = background.permit();
+    expect(second?.segments).toEqual([
+      { id: 1, text: "Other words" },
+      { id: 2, text: "Reply" },
+    ]);
+    background.answer(second, ["다른 말", "답글"]);
+    expect(document.querySelector("#c")?.textContent).toBe("다른 말");
+    expect(background.translations()).toHaveLength(2);
+  });
+
+  it("starts a run at a heading once the run before it is half full", () => {
+    startWith(
+      "<p>Twelve chars</p><h2>Heading</h2><p>Body</p><h2>Next</h2><p>More</p>",
+      { batchChars: 20 },
+    );
+    show("p, h2");
+
+    expect(background.permit()?.segments).toEqual([
+      { id: 1, text: "Twelve chars" },
+    ]);
+    // "Heading" and "Body" are 11 characters, so "Next" starts a run too.
+    expect(background.permit()?.segments).toEqual([
+      { id: 1, text: "Heading" },
+      { id: 2, text: "Body" },
+    ]);
+    expect(background.permit()?.segments).toEqual([
+      { id: 1, text: "Next" },
+      { id: 2, text: "More" },
+    ]);
+  });
+
+  it("asks again only for what a request left unanswered", () => {
+    startWith("<p>One</p><p>Two</p><p>Three</p>");
+    show("p");
+    const request = background.permit();
+    background.answer(request, ["하나"]);
+
+    expect(background.permit()?.segments).toEqual([
+      { id: 1, text: "Two" },
+      { id: 2, text: "Three" },
+    ]);
   });
 
   it("starts another request for what does not fit into one", () => {

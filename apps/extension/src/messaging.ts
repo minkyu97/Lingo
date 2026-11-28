@@ -127,6 +127,14 @@ const runtimeMessageSchema = z.discriminatedUnion("type", [
     provider: z.enum(PROVIDER_IDS),
     apiKey: z.string().min(1).max(MAX_API_KEY_CHARS),
   }),
+  /**
+   * Settings page to background: how much does the cache hold? With `clear`,
+   * every stored answer is removed first. The answer is a `CacheUsage`.
+   */
+  z.object({
+    type: z.literal("response-cache"),
+    action: z.enum(["usage", "clear"]),
+  }),
 ]);
 
 /** One-off messages sent with `runtime.sendMessage` or `tabs.sendMessage`. */
@@ -169,6 +177,22 @@ export const keyCheckSchema = z
   .catch({ status: "unreachable", models: [] });
 
 export type KeyCheck = z.infer<typeof keyCheckSchema>;
+
+/**
+ * How many answers the cache holds, how much room they take, and how much it
+ * may take, in bytes. `undefined` when the background did not answer.
+ */
+export const cacheUsageSchema = z
+  .object({ entries: z.number(), bytes: z.number(), maxBytes: z.number() })
+  .optional()
+  .catch(undefined);
+
+export type CacheUsage = z.infer<typeof cacheUsageSchema>;
+
+export type CacheAction = Extract<
+  RuntimeMessage,
+  { type: "response-cache" }
+>["action"];
 
 /** What the top frame did with a `settings-drawer` message. */
 export const drawerAnswerSchema = z.enum(["opened", "closed", "unchanged"]);

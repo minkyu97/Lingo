@@ -39,6 +39,8 @@ export {
 } from "./page/placeholder.ts";
 export { SettingsPanel } from "./settings/SettingsPanel.tsx";
 export type {
+  CacheStore,
+  CacheUsage,
   KeyCheck,
   PageSwitch,
   ProviderChoice,

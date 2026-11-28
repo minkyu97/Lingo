@@ -26,6 +26,7 @@ describe("settings", () => {
       contextAwareness: false,
       maxContextChars: 400,
       pageRequestsPerSecond: 5,
+      cacheResponses: false,
     };
     await saveSettings(settings);
     expect(await loadSettings()).toEqual(settings);

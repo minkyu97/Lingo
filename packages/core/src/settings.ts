@@ -25,6 +25,11 @@ export interface Settings {
   maxContextChars: number;
   /** Most page translation requests started in any one second. */
   pageRequestsPerSecond: number;
+  /**
+   * Whether answers are kept, so that the same request is not sent to a
+   * provider twice.
+   */
+  cacheResponses: boolean;
 }
 
 export const MAX_CONTEXT_CHARS_LIMIT = 4000;
@@ -96,6 +101,7 @@ export function defaultSettings(locale?: string): Settings {
     contextAwareness: true,
     maxContextChars: 1000,
     pageRequestsPerSecond: 3,
+    cacheResponses: true,
   };
 }
 
@@ -124,6 +130,7 @@ export function normalizeSettings(value: unknown, locale?: string): Settings {
         .number()
         .transform(clampPageRequestRate)
         .catch(defaults.pageRequestsPerSecond),
+      cacheResponses: z.boolean().catch(defaults.cacheResponses),
     })
     .catch(defaults);
 

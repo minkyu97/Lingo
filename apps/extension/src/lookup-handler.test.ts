@@ -64,9 +64,16 @@ interface Setup {
   apiKey?: string | null;
   provider?: StreamingProvider;
   baseURL?: LookupDeps["baseURL"];
+  cache?: LookupDeps["cache"];
 }
 
-function setup({ settings, apiKey = "key", provider, baseURL }: Setup = {}) {
+function setup({
+  settings,
+  apiKey = "key",
+  provider,
+  baseURL,
+  cache,
+}: Setup = {}) {
   const created: CreateProviderOptions[] = [];
   const requests: ChatRequest[] = [];
   const inner = provider ?? providerYielding("강", "둑");
@@ -87,6 +94,7 @@ function setup({ settings, apiKey = "key", provider, baseURL }: Setup = {}) {
       };
     },
     baseURL,
+    cache,
   };
   const fake = fakePort();
   handleLookupPort(fake.port, deps);
@@ -166,6 +174,43 @@ describe("handleLookupPort", () => {
     await settled(events);
     // None is chosen for definitions, so the first engine does them.
     expect(created[0]).toMatchObject({ model: "claude-opus-5-5" });
+  });
+
+  it("answers a lookup it has answered before from the cache", async () => {
+    const stored = new Map<string, string>();
+    const cache = {
+      get: async (key: string) => stored.get(key),
+      set: async (key: string, answer: string) => {
+        stored.set(key, answer);
+      },
+    };
+    const first = setup({ cache });
+    first.send(start);
+    await settled(first.events);
+    expect(first.requests).toHaveLength(1);
+
+    // Another lookup of the same text, in another port.
+    const second = setup({ cache });
+    second.send(start);
+    await settled(second.events);
+    expect(second.requests).toHaveLength(0);
+    expect(second.events).toEqual([
+      { type: "started", context: start.context },
+      { type: "delta", text: "강둑" },
+      { type: "done" },
+    ]);
+
+    // Another mode is another request.
+    const third = setup({ cache });
+    third.send({ ...start, mode: "define" });
+    await settled(third.events);
+    expect(third.requests).toHaveLength(1);
+
+    // With the setting off, the cache is neither read nor written.
+    const off = setup({ cache, settings: { cacheResponses: false } });
+    off.send(start);
+    await settled(off.events);
+    expect(off.requests).toHaveLength(1);
   });
 
   it("asks for an engine before the first one is added", async () => {

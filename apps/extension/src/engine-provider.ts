@@ -5,7 +5,9 @@ import {
   LLMError,
   type LLMProvider,
   type ProviderId,
+  type ResponseCache,
   type Settings,
+  withCache,
 } from "@lingo/core";
 import type { CreateProviderOptions } from "@lingo/providers";
 
@@ -15,6 +17,8 @@ export interface EngineDeps {
   createProvider(options: CreateProviderOptions): Pick<LLMProvider, "stream">;
   /** Overrides the provider's API address. Used by end-to-end tests. */
   baseURL?(provider: ProviderId): string | undefined;
+  /** Where answers are kept. Used while the settings ask for it. */
+  cache?: ResponseCache;
 }
 
 /**
@@ -34,7 +38,7 @@ export async function providerForTask(
   const apiKey = await deps.loadEngineKey(engine.id);
   if (!apiKey) throw new LLMError("missing_key", "No API key is set.");
 
-  const provider = deps.createProvider({
+  const created = deps.createProvider({
     provider: engine.provider,
     apiKey,
     model: engine.model,
@@ -42,5 +46,15 @@ export async function providerForTask(
     parameters: engine.parameters,
     baseURL: deps.baseURL?.(engine.provider),
   });
+  // Every task asks its provider here, so this is where answers are reused.
+  const provider =
+    deps.cache && settings.cacheResponses
+      ? withCache(created, deps.cache, {
+          provider: engine.provider,
+          model: engine.model,
+          capabilities: engine.capabilities,
+          parameters: engine.parameters,
+        })
+      : created;
   return { engine, provider };
 }

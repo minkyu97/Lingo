@@ -1,6 +1,7 @@
 import { nativeLanguageName } from "@lingo/core";
 import {
   CodeXml,
+  Database,
   FileText,
   Gauge,
   Keyboard,
@@ -9,12 +10,18 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ActionRow } from "./ActionRow.tsx";
+import { formatBytes } from "./CacheScreen.tsx";
 import { PanelHeader } from "./PanelHeader.tsx";
 import { SettingsRow } from "./SettingsRow.tsx";
 import type { SettingsPanelProps } from "./types.ts";
 
 /** The screens a row of the main screen can lead to. */
-export type DetailScreen = "engines" | "language" | "context" | "requestRate";
+export type DetailScreen =
+  | "engines"
+  | "language"
+  | "context"
+  | "requestRate"
+  | "cache";
 
 /** The list of settings, each with its current value. */
 export function MainScreen({
@@ -23,6 +30,7 @@ export function MainScreen({
   version,
   sourceUrl,
   page,
+  cache,
   onOpenShortcuts,
   onClose,
   onOpen,
@@ -31,6 +39,10 @@ export function MainScreen({
   const context = settings.contextAwareness
     ? `On · ${settings.maxContextChars.toLocaleString("en-US")} chars`
     : "Off";
+  // How much is stored shows once it is known.
+  const stored = cache.usage
+    ? ` · ${cache.usage.entries === 0 ? "empty" : formatBytes(cache.usage.bytes)}`
+    : "";
 
   return (
     <>
@@ -84,6 +96,12 @@ export function MainScreen({
           label="Translate into"
           value={nativeLanguageName(settings.targetLanguage)}
           onClick={() => onOpen("language")}
+        />
+        <SettingsRow
+          icon={Database}
+          label="Cache"
+          value={settings.cacheResponses ? `On${stored}` : "Off"}
+          onClick={() => onOpen("cache")}
         />
         <SettingsRow
           icon={Keyboard}

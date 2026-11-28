@@ -1,5 +1,6 @@
 import type { EngineTask } from "@lingo/core";
 import { useState } from "react";
+import { CacheScreen } from "./CacheScreen.tsx";
 import { ContextScreen } from "./ContextScreen.tsx";
 import { EngineScreen } from "./EngineScreen.tsx";
 import { EnginesScreen } from "./EnginesScreen.tsx";
@@ -31,7 +32,14 @@ export function SettingsPanel(props: SettingsPanelProps) {
   return (
     <div className="lingo lingo-settings">
       {screen.name === "main" && (
-        <MainScreen {...props} onOpen={(name) => setScreen({ name })} />
+        <MainScreen
+          {...props}
+          onOpen={(name) => {
+            // What was stored while the panel was open is counted too.
+            if (name === "cache") props.cache.onRefresh();
+            setScreen({ name });
+          }}
+        />
       )}
       {screen.name === "engines" && (
         <EnginesScreen
@@ -73,6 +81,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
       {screen.name === "requestRate" && (
         <RequestRateScreen {...props} onBack={toMain} />
       )}
+      {screen.name === "cache" && <CacheScreen {...props} onBack={toMain} />}
     </div>
   );
 }

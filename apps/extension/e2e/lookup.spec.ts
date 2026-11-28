@@ -288,3 +288,75 @@ test("looks up the selection when the shortcut message arrives", async ({
 
   await expectFinishedEntry(page);
 });
+
+test("asks the provider once for the same lookup", async ({
+  context,
+  extensionId,
+}) => {
+  await setUp(context, extensionId, { apiKey: "test-key" });
+  const page = await openPageAndSelect(context, "bank");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+  expect(await recordedRequests(page)).toHaveLength(1);
+
+  // The same word again, also in a page that was loaded anew.
+  await page.reload();
+  await page.locator("lingo-ui").waitFor({ state: "attached" });
+  await selectWord(page, "bank");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+  expect(await recordedRequests(page)).toHaveLength(1);
+
+  // Another word is another request.
+  await page.keyboard.press("Escape");
+  await selectWord(page, "boats");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+  expect(await recordedRequests(page)).toHaveLength(2);
+});
+
+test("clears the stored answers, and stops reusing them when turned off", async ({
+  context,
+  extensionId,
+}, testInfo) => {
+  const settings = await setUp(context, extensionId, { apiKey: "test-key" });
+  const cacheRow = settings.getByRole("button", { name: /^Cache/ });
+  await expect(cacheRow).toContainText("On · empty");
+
+  const page = await openPageAndSelect(context, "bank");
+  const lookUpAgain = async () => {
+    await page.reload();
+    await page.locator("lingo-ui").waitFor({ state: "attached" });
+    await selectWord(page, "bank");
+    await trigger(page).click();
+    await expectFinishedEntry(page);
+  };
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+  expect(await recordedRequests(page)).toHaveLength(1);
+
+  // The settings say what is stored, and clearing it removes it.
+  await cacheRow.click();
+  await expect(settings.getByText(/^1 answer, 1 KB of 9 MB\./)).toBeVisible();
+  await settings.screenshot({ path: testInfo.outputPath("cache.png") });
+  await settings.getByRole("button", { name: "Clear cache" }).click();
+  await expect(settings.getByText("Nothing is stored.")).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: "Cleared" }),
+  ).toBeDisabled();
+  await settings.screenshot({ path: testInfo.outputPath("cleared.png") });
+  await lookUpAgain();
+  expect(await recordedRequests(page)).toHaveLength(2);
+
+  // Turned off, the answer that was just stored is kept and not used.
+  await settings.getByRole("switch", { name: "Reuse answers" }).click();
+  await settings.getByRole("button", { name: "Back" }).click();
+  await expect(cacheRow).toContainText("Off");
+  await lookUpAgain();
+  expect(await recordedRequests(page)).toHaveLength(3);
+
+  await cacheRow.click();
+  await expect(
+    settings.getByText(/^1 answer, .* They are kept, and not used/),
+  ).toBeVisible();
+});
