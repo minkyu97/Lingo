@@ -144,7 +144,10 @@ test("translates what is near the viewport, and more when scrolled", async ({
   context,
   worker,
 }) => {
-  await configure(worker, { tuning: { aheadViewports: 1 } });
+  // A request holds about ten paragraphs of this page.
+  await configure(worker, {
+    tuning: { aheadViewports: 1, batchChars: 300 },
+  });
   const page = await openLongPage(context, worker);
 
   await toggleTranslation(worker);
@@ -157,19 +160,20 @@ test("translates what is near the viewport, and more when scrolled", async ({
     const below = (id: string) =>
       (document.querySelector(id)?.getBoundingClientRect().top ?? 0) -
       window.innerHeight;
-    return { p5: below("#p5"), p20: below("#p20") };
+    return { p5: below("#p5"), p40: below("#p40") };
   });
   expect(ahead.p5).toBeGreaterThan(0);
   expect(ahead.p5).toBeLessThan(720);
   expect(await text(page, "#p5")).toBe("PARAGRAPH 5 OF THE LONG PAGE.");
-  // Further down, nothing was sent.
-  expect(ahead.p20).toBeGreaterThan(720);
-  expect(await text(page, "#p20")).toBe("Paragraph 20 of the long page.");
+  // Further down, past the run of paragraphs that the last one near the
+  // viewport is in, nothing was sent.
+  expect(ahead.p40).toBeGreaterThan(720);
+  expect(await text(page, "#p40")).toBe("Paragraph 40 of the long page.");
   expect(await text(page, "#p60")).toBe("Paragraph 60 of the long page.");
   const sentBefore = (await recordedRequests(page)).flatMap(
     (request) => request.body.messages?.[0]?.content ?? "",
   );
-  expect(sentBefore.join("\n")).not.toContain("Paragraph 20 of");
+  expect(sentBefore.join("\n")).not.toContain("Paragraph 40 of");
 
   // Jump to the end. What is there is translated; what was skipped is not.
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -583,6 +587,43 @@ test("translates a page it has translated before without asking again", async ({
   await page.evaluate(() => window.scrollTo(0, 1500));
   await expect(page.locator("#p12")).toHaveText(/^PARAGRAPH 12/);
   await expectSettled(page);
+
+  expect(await recordedRequests(page)).toHaveLength(first);
+});
+
+test("asks nothing again in a window of another height, scrolled another way", async ({
+  context,
+  worker,
+}) => {
+  await configure(worker);
+  const page = await openLongPage(context, worker);
+  const scrollTo = async (y: number) => {
+    await page.evaluate((top) => window.scrollTo(0, top), y);
+    // Long enough for what has come near to be asked for.
+    await page.waitForTimeout(700);
+    await expectSettled(page);
+  };
+  await toggleTranslation(worker);
+  await expect(page.locator("h1")).toHaveText("LONG PAGE");
+  // Down the whole page, so that all of it has been asked for.
+  const height = await page.evaluate(() => document.body.scrollHeight);
+  for (let y = 600; y < height; y += 600) await scrollTo(y);
+  await expect(page.locator("#p60")).toHaveText(/^PARAGRAPH 60/);
+  const first = (await recordedRequests(page)).length;
+  expect(first).toBeGreaterThan(1);
+
+  // The requests are cut by the text of the page, so the same ones are
+  // made whatever is near the viewport first. The reload keeps the scroll
+  // position, so this visit starts at the bottom.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.reload();
+  await waitUntilListening(page, worker);
+  await toggleTranslation(worker);
+  await expect(page.locator("#p60")).toHaveText(/^PARAGRAPH 60/);
+  await scrollTo(1300);
+  await scrollTo(0);
+  await expect(page.locator("h1")).toHaveText("LONG PAGE");
+  await scrollTo(2100);
 
   expect(await recordedRequests(page)).toHaveLength(first);
 });

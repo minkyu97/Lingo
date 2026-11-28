@@ -132,6 +132,9 @@ const RETRY_PAUSE_MS = 5000;
  */
 const MAX_RESCANS = 8;
 
+/** The elements that head a section of a page. */
+const HEADING = /^h[1-6]$/;
+
 /** How often the port may close in a row before translation gives up. */
 const MAX_RECONNECTS = 3;
 
@@ -280,6 +283,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
       alone: false,
     };
     tracked.add(item);
+    runs = undefined;
     for (const node of nodesOf(unit)) owners.set(node, item);
 
     let items = byHost.get(unit.host);
@@ -297,6 +301,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
   /** Forgets a unit, and takes its translation out of the page. */
   function drop(item: Tracked) {
     if (!tracked.delete(item)) return;
+    runs = undefined;
     queue.delete(item);
     if (isPending(item.state)) env.onPending?.(item.unit, false);
     for (const node of nodesOf(item.unit)) owners.delete(node);
@@ -374,52 +379,135 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
     return 0;
   }
 
-  const inPageOrder = (a: Tracked, b: Tracked) => {
-    const first = (item: Tracked) =>
-      item.unit.root.original[0] ?? item.unit.root.parent;
-    const position = first(a).compareDocumentPosition(first(b));
-    return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-  };
+  /** The first node of a unit, by which units are put in page order. */
+  const startOf = (item: Tracked): Node =>
+    item.unit.root.original[0] ?? item.unit.root.parent;
 
   /**
-   * Picks the units of the next request: what is on screen first, then what
-   * is closest to it, up to the size of one request. Units with the same
-   * text share a segment.
+   * A node and the hosts of the shadow trees it is in, from the inside out.
+   * Two nodes of different trees have no order of their own, so they are
+   * ordered by where their trees hang in the page.
    */
-  function nextBatch(batchChars: number): Tracked[][] {
-    const distances = new Map<Tracked, number>();
-    for (const item of queue) distances.set(item, distance(item));
-    const closestFirst = [...queue].sort(
-      (a, b) => (distances.get(a) ?? 0) - (distances.get(b) ?? 0),
-    );
-
-    const [closest] = closestFirst;
-    if (closest?.alone) {
-      const same = (item: Tracked) => item.unit.source === closest.unit.source;
-      return [closestFirst.filter(same)];
+  function* outward(node: Node): Generator<Node> {
+    for (let current: Node | undefined = node; current; ) {
+      yield current;
+      current = (current.getRootNode() as Partial<ShadowRoot>).host;
     }
+  }
 
-    const groups = new Map<string, Tracked[]>();
-    let chars = 0;
-    for (const item of closestFirst) {
-      if (item.alone) continue;
-      const { source } = item.unit;
-      const group = groups.get(source);
-      if (group) {
-        group.push(item);
-        continue;
+  function inPageOrder(a: Tracked, b: Tracked): number {
+    const fromB = [...outward(startOf(b))];
+    for (const nodeA of outward(startOf(a))) {
+      const root = nodeA.getRootNode();
+      const nodeB = fromB.find((node) => node.getRootNode() === root);
+      if (!nodeB) continue;
+      // One is inside the shadow tree of the other's ancestor. The light
+      // children come first, as `scanHost` reads them.
+      if (nodeA === nodeB) return nodeA === startOf(a) ? -1 : 1;
+      const position = nodeA.compareDocumentPosition(nodeB);
+      return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    }
+    return 0;
+  }
+
+  /**
+   * The page's units cut into runs, in page order. Each run is what one
+   * request holds. Worked out again after the page's units have changed.
+   */
+  let runs: Map<Tracked, Tracked[]> | undefined;
+
+  /**
+   * Cuts the units into runs of up to `batchChars` of text, from the top of
+   * the page. Where a run ends depends on the text of the page alone, not on
+   * the viewport or on what was translated when, so that the same page asks
+   * the same requests each time, and the cache in the background can answer
+   * them.
+   *
+   * A heading starts a new run once the run before it is half full. That way
+   * runs fall back into step after a place where the page has changed.
+   */
+  function runOf(item: Tracked): Tracked[] {
+    if (!runs) {
+      const batchChars = config?.options.batchChars ?? 0;
+      runs = new Map();
+      let run: Tracked[] = [];
+      let sources = new Set<string>();
+      let chars = 0;
+      const inOrder = [...tracked]
+        .filter((each) => each.unit.source.length <= MAX_UNIT_CHARS)
+        .sort(inPageOrder);
+      for (const each of inOrder) {
+        const { source } = each.unit;
+        const added = sources.has(source) ? 0 : source.length;
+        const full =
+          run.length > 0 &&
+          (chars + added > batchChars ||
+            (added > 0 && sources.size >= MAX_BATCH_SEGMENTS) ||
+            (HEADING.test(each.unit.host.localName) &&
+              chars >= batchChars / 2));
+        if (full) {
+          run = [];
+          sources = new Set();
+          chars = 0;
+        }
+        run.push(each);
+        if (!sources.has(source)) chars += source.length;
+        sources.add(source);
+        runs.set(each, run);
       }
-      const full =
-        groups.size >= MAX_BATCH_SEGMENTS ||
-        (groups.size > 0 && chars + source.length > batchChars);
-      if (full) continue;
-      groups.set(source, [item]);
-      chars += source.length;
     }
-    // Sent in page order, so that the model reads them as running text.
-    return [...groups.values()].sort((a, b) =>
-      a[0] && b[0] ? inPageOrder(a[0], b[0]) : 0,
-    );
+    return runs.get(item) ?? [item];
+  }
+
+  /** One segment of a request, and the units that wait for its answer. */
+  interface Group {
+    source: string;
+    waiting: Tracked[];
+  }
+
+  /**
+   * Picks what the next request holds: the run of the queued unit closest to
+   * the viewport, whole. The units of the run that are farther away are
+   * translated with it.
+   *
+   * A text of the run that is translated already, from an answer to another
+   * run, is sent all the same: leaving it out would make the request depend
+   * on which run was answered first. What a request of its own was sent for
+   * before is not sent again.
+   */
+  function nextBatch(): Group[] {
+    let closest: Tracked | undefined;
+    let least = Number.POSITIVE_INFINITY;
+    for (const item of queue) {
+      const far = distance(item);
+      if (far < least) {
+        closest = item;
+        least = far;
+      }
+    }
+    if (!closest) return [];
+
+    if (closest.alone) {
+      const { source } = closest.unit;
+      const same = [...queue].filter((item) => item.unit.source === source);
+      return [{ source, waiting: same }];
+    }
+
+    const groups = new Map<string, Group>();
+    for (const item of runOf(closest)) {
+      const waits =
+        !item.alone && (item.state === "queued" || item.state === "idle");
+      const known = item.state === "done" && item.attempts === 0;
+      if (!waits && !known) continue;
+      const { source } = item.unit;
+      let group = groups.get(source);
+      if (!group) {
+        group = { source, waiting: [] };
+        groups.set(source, group);
+      }
+      if (waits) group.waiting.push(item);
+    }
+    return [...groups.values()];
   }
 
   /** Asks for leave to send a request, when there is something to send. */
@@ -431,7 +519,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
 
   function send() {
     if (!config) return;
-    const groups = nextBatch(config.options.batchChars);
+    const groups = nextBatch();
     if (groups.length === 0) return;
 
     lastBatch += 1;
@@ -439,9 +527,9 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
     const segments: PageSegment[] = [];
     groups.forEach((group, index) => {
       const id = index + 1;
-      waiting.set(id, group);
-      segments.push({ id, text: group[0]?.unit.source ?? "" });
-      for (const item of group) {
+      segments.push({ id, text: group.source });
+      if (group.waiting.length > 0) waiting.set(id, group.waiting);
+      for (const item of group.waiting) {
         item.attempts += 1;
         queue.delete(item);
         setState(item, "sent");
@@ -790,6 +878,7 @@ export function createPageTranslator(env: PageTranslatorEnv): PageTranslator {
         if (item.unit.translated) restoreUnit(item.unit);
       }
       tracked.clear();
+      runs = undefined;
       byHost.clear();
       queue.clear();
       inFlight.clear();
