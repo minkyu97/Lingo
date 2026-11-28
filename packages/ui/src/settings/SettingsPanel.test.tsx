@@ -1,5 +1,6 @@
 import { defaultSettings, type Engine, type Settings } from "@lingo/core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -62,6 +63,11 @@ function renderPanel(props: Partial<SettingsPanelProps> = {}) {
     onOpenShortcuts: vi.fn(),
     onClose: vi.fn(),
   };
+  const cache = {
+    usage: { entries: 412, bytes: 3_355_443, maxBytes: 9 * 1024 * 1024 },
+    onRefresh: vi.fn(),
+    onClear: vi.fn(),
+  };
   const all: SettingsPanelProps = {
     settings,
     providers,
@@ -69,6 +75,7 @@ function renderPanel(props: Partial<SettingsPanelProps> = {}) {
     shortcuts: ["⌥⇧L", "⌥⇧P"],
     version: "0.1.0",
     sourceUrl: "https://source.example/lingo",
+    cache,
     ...handlers,
     ...props,
   };
@@ -78,7 +85,7 @@ function renderPanel(props: Partial<SettingsPanelProps> = {}) {
   // A test may bring its own check, which then stands in for the default.
   const onCheckKey = (props.onCheckKey ??
     handlers.onCheckKey) as typeof handlers.onCheckKey;
-  return { ...handlers, onCheckKey, rerender };
+  return { ...handlers, cache, onCheckKey, rerender };
 }
 
 const open = (row: string) =>
@@ -134,6 +141,7 @@ describe("the main screen", () => {
     expect(row("Translation engines")).toContain("3 engines");
     expect(row("Context")).toContain("On · 1,000 chars");
     expect(row("Request rate")).toContain("3 per second");
+    expect(row("Cache")).toContain("On · 3.2 MB");
     expect(row("Translate into")).toContain("한국어");
     expect(row("Keyboard shortcuts")).toContain("⌥⇧L · ⌥⇧P");
     expect(screen.getByText("Lingo 0.1.0")).toBeDefined();
@@ -865,5 +873,96 @@ describe("the request rate screen", () => {
     open("Request rate");
     expect(checked("Other…")).toBe(true);
     expect(field().value).toBe("40");
+  });
+});
+
+describe("the cache screen", () => {
+  const usage = { entries: 412, bytes: 3_355_443, maxBytes: 9 * 1024 * 1024 };
+  const clearButton = () =>
+    screen.getByRole("button", { name: /^Clear/ }) as HTMLButtonElement;
+
+  it("says on the main screen whether it is on and how much it holds", () => {
+    const { cache, rerender } = renderPanel();
+    expect(row("Cache")).toContain("On · 3.2 MB");
+
+    rerender({
+      cache: { ...cache, usage: { ...usage, entries: 0, bytes: 0 } },
+    });
+    expect(row("Cache")).toContain("On · empty");
+
+    // Before the host knows how much is stored.
+    rerender({ cache: { ...cache, usage: undefined } });
+    expect(row("Cache")).toMatch(/CacheOn$/);
+
+    rerender({ settings: { ...settings, cacheResponses: false } });
+    expect(row("Cache")).toMatch(/CacheOff$/);
+  });
+
+  it("turns the reuse of answers off and on", () => {
+    const { onSettingsChange, cache } = renderPanel();
+    open("Cache");
+
+    expect(title()).toBe("Cache");
+    // What was stored since the panel opened is counted when the screen is.
+    expect(cache.onRefresh).toHaveBeenCalledOnce();
+    const reuse = screen.getByRole("switch", { name: "Reuse answers" });
+    expect(reuse.getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(reuse);
+    expect(onSettingsChange).toHaveBeenCalledWith({
+      ...settings,
+      cacheResponses: false,
+    });
+  });
+
+  it("says how much is stored, and what becomes of it", () => {
+    const { rerender } = renderPanel();
+    open("Cache");
+    expect(
+      screen.getByText(
+        "412 answers, 3.2 MB of 9 MB. When it is full, the answers used longest ago make room.",
+      ),
+    ).toBeDefined();
+
+    rerender({ settings: { ...settings, cacheResponses: false } });
+    expect(
+      screen.getByText(
+        "412 answers, 3.2 MB of 9 MB. They are kept, and not used, while this is off.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("counts one answer as one, and small sizes in KB", () => {
+    const { cache, rerender } = renderPanel();
+    open("Cache");
+    rerender({
+      cache: { ...cache, usage: { ...usage, entries: 1, bytes: 2600 } },
+    });
+    expect(screen.getByText(/^1 answer, 3 KB of 9 MB\./)).toBeDefined();
+  });
+
+  it("clears the cache at once, and says so for a moment", () => {
+    vi.useFakeTimers();
+    try {
+      const { cache, rerender } = renderPanel();
+      open("Cache");
+      fireEvent.click(clearButton());
+
+      expect(cache.onClear).toHaveBeenCalledOnce();
+      expect(clearButton().textContent).toBe("Cleared");
+      expect(clearButton().disabled).toBe(true);
+
+      rerender({
+        cache: { ...cache, usage: { ...usage, entries: 0, bytes: 0 } },
+      });
+      expect(screen.getByText("Nothing is stored.")).toBeDefined();
+
+      act(() => void vi.advanceTimersByTime(2000));
+      expect(clearButton().textContent).toBe("Clear cache");
+      // There is nothing left to clear.
+      expect(clearButton().disabled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

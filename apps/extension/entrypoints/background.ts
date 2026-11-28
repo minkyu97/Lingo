@@ -2,6 +2,7 @@ import type { ProviderId } from "@lingo/core";
 import { createProvider } from "@lingo/providers";
 import { browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
+import { answerCacheRequest } from "../src/cache-usage.ts";
 import { checkApiKey } from "../src/key-check.ts";
 import { handleLookupPort } from "../src/lookup-handler.ts";
 import {
@@ -49,9 +50,10 @@ export default defineBackground(() => {
 
   // Answers are kept in the same storage as the settings, which is closed
   // to content scripts. Some of its room is left for everything else.
+  const maxCacheBytes = browser.storage.local.QUOTA_BYTES - CACHE_RESERVE_BYTES;
   const cache = createResponseCache({
     area: browser.storage.local,
-    maxBytes: browser.storage.local.QUOTA_BYTES - CACHE_RESERVE_BYTES,
+    maxBytes: maxCacheBytes,
   });
 
   // API keys are used and provider calls are made here only, never in a
@@ -138,6 +140,14 @@ export default defineBackground(() => {
           baseURL,
         }).then(sendResponse);
         // Keeps the channel open until the provider has answered.
+        return true;
+      case "response-cache":
+        // Stored answers hold what the user read. Web pages do not get them.
+        if (!fromOwnPage) return;
+        void answerCacheRequest(message.action, cache, maxCacheBytes).then(
+          sendResponse,
+        );
+        // Keeps the channel open until the cache has been read.
         return true;
     }
   });

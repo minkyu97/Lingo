@@ -5,9 +5,10 @@ import {
   saveEngine,
 } from "@lingo/core";
 import { PROVIDERS } from "@lingo/providers/catalog";
-import { type PageSwitch, SettingsPanel } from "@lingo/ui";
+import { type CacheUsage, type PageSwitch, SettingsPanel } from "@lingo/ui";
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
+import { requestCacheUsage } from "../cache-usage.ts";
 import { requestKeyCheck } from "../key-check.ts";
 import {
   isRuntimeMessage,
@@ -88,8 +89,10 @@ export function SettingsApp({ onClose, inPage = false }: SettingsAppProps) {
   const [settings, setSettings] = useState<Settings>();
   const [engineKeys, setEngineKeys] = useState<EngineKeys>({});
   const [shortcuts, setShortcuts] = useState<string[]>([]);
+  const [cacheUsage, setCacheUsage] = useState<CacheUsage>();
 
   useEffect(() => {
+    void requestCacheUsage("usage").then(setCacheUsage);
     // The settings first: reading them is what turns old keys into engine keys.
     void loadSettings().then(async (loaded) => {
       setEngineKeys(await loadEngineKeys());
@@ -140,6 +143,11 @@ export function SettingsApp({ onClose, inPage = false }: SettingsAppProps) {
       onEngineSave={storeEngine}
       onEngineRemove={discardEngine}
       onOpenShortcuts={() => void browser.tabs.create({ url: SHORTCUTS_URL })}
+      cache={{
+        usage: cacheUsage,
+        onRefresh: () => void requestCacheUsage("usage").then(setCacheUsage),
+        onClear: () => void requestCacheUsage("clear").then(setCacheUsage),
+      }}
       onClose={onClose}
       page={page}
     />

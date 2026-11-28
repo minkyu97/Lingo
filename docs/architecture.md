@@ -59,17 +59,19 @@ Releases are tagged per surface: `ext-v*`, `desktop-v*`, `ios-v*`.
 | `partial-json.ts` | `parsePartialJson`: reads as much of a JSON document as has arrived so far                                                                    |
 | `mode.ts`         | `chooseMode`: define a word or short phrase, translate anything longer                                                                        |
 | `settings.ts`     | `Settings`, its defaults, `normalizeSettings` with its schema, the offered target languages with their names, and the offered context lengths |
+| `cache.ts`        | The `ResponseCache` port, `cacheKey`, and `withCache`, which puts a cache in front of a provider                                              |
 | `lookup.ts`       | `prepareLookup`: the use case that applies the settings to a captured context and builds the request                                          |
 
 Each app supplies the adapters:
 
-| Port                      | Extension                                          | Desktop (planned)                         | iOS (planned)                         |
-| ------------------------- | -------------------------------------------------- | ----------------------------------------- | ------------------------------------- |
-| `LLMProvider` (streaming) | `@lingo/providers`                                 | `@lingo/providers`                        | Swift port over URLSession + SSE      |
-| Context capture           | DOM, in `apps/extension/src/context/dom.ts`        | Accessibility / UI Automation / clipboard | Selection only; DOM in Safari         |
-| Settings and key storage  | `storage.local`, in `apps/extension/src/stores.ts` | App settings file and the OS keychain     | App Group and a shared Keychain group |
+| Port                      | Extension                                                  | Desktop (planned)                         | iOS (planned)                         |
+| ------------------------- | ---------------------------------------------------------- | ----------------------------------------- | ------------------------------------- |
+| `LLMProvider` (streaming) | `@lingo/providers`                                         | `@lingo/providers`                        | Swift port over URLSession + SSE      |
+| `ResponseCache`           | `storage.local`, in `apps/extension/src/response-cache.ts` | Not decided                               | Not decided                           |
+| Context capture           | DOM, in `apps/extension/src/context/dom.ts`                | Accessibility / UI Automation / clipboard | Selection only; DOM in Safari         |
+| Settings and key storage  | `storage.local`, in `apps/extension/src/stores.ts`         | App settings file and the OS keychain     | App Group and a shared Keychain group |
 
-Only `LLMProvider` is an interface in `core` today. Context capture and storage are plain functions in the extension that return core types. They become interfaces in `core` when a second app needs to share the code that calls them.
+`LLMProvider` and `ResponseCache` are the interfaces in `core` today. Context capture and storage are plain functions in the extension that return core types. They become interfaces in `core` when a second app needs to share the code that calls them.
 
 The central types:
 
@@ -120,6 +122,7 @@ Data that arrives without a trustworthy type goes through a Zod schema, and the 
 | Stored settings                         | `normalizeSettings` in `core`                     | Each wrong field falls back to its default                          |
 | Stored engines                          | `enginesSchema` in `core`                         | An engine that is unusable is left out, and the rest stay           |
 | Stored API keys                         | `apps/extension/src/stores.ts`                    | Wrong entries are left out                                          |
+| Stored answers of the cache             | `apps/extension/src/response-cache.ts`            | Anything of another shape is no answer, and the provider is asked   |
 | Settings from before there were engines | `apps/extension/src/legacy-settings.ts`           | Anything of another shape is not converted                          |
 | A model's dictionary entry              | `packages/core/src/dictionary.ts`                 | Each missing or wrong field reads as empty                          |
 
@@ -265,6 +268,25 @@ A user sets up engines, and chooses one for each task. `packages/core/src/engine
 - **Before there were engines** the settings held one provider for everything, a model per provider, and a key per provider. On the first read after an update those become engines, and the old keys are removed: the selected provider's lookup model and page model become its engines and take over the tasks, and another provider with a key becomes an engine too.
 
 Not offered: a custom API address for an engine. Each address needs access to its site granted, so it belongs with local model support.
+
+### Response cache
+
+An answer from a provider is kept, and the same request is answered from what was kept. It can be turned off in the settings, and is on by default.
+
+- **One place for every task.** `withCache` in `core` wraps an `LLMProvider` and is one itself. The extension puts it around the provider in `providerForTask`, which every task goes through, so a lookup and a page translation are cached by the same code and neither knows of it.
+- **The key is what decides the answer**, not the engine's ID: the provider, the model, what the model accepts, the extra parameters, and the whole request, which holds the prompt, the target language, the text, and its context. `cacheKey` writes them as JSON with the keys in a fixed order. An engine that is edited therefore stops finding its old answers, and two engines with the same provider, model, and parameters share theirs. The API key is not part of it.
+- **What the adapters decide on their own is not in the key**: the output limit, the effort, and the request shape for a model. `CACHE_VERSION` is part of every key. Raise it when one of those changes, and every earlier answer is left unused.
+- **Only a whole answer is stored**: one whose stream ended by itself, with text in it. A failure, a refusal, an answer the user cancelled, and an empty answer are not stored. A stored answer comes back as a single chunk.
+- **Storage** is `storage.local`, the same area as the settings, which is closed to content scripts. Each answer is one item, named `cache:` and the SHA-256 of its key, with the time it was last used. Nothing of the request is stored but that hash.
+- **Least recently used goes first.** The area may hold 10 MB, of which the cache leaves 1 MB to everything else. When a write takes it over that, or the browser refuses a write, the answers used longest ago are removed until the area is at 80% of the limit. Reading an answer counts as using it.
+- **Failures of the cache are not failures of the task.** When an answer cannot be read or stored, the provider is asked as if there were no cache.
+- **The settings** show how many answers are stored and how much room they take, and clear them. They ask the background to do it, where the cache lives, so that answers are not stored and removed at once. Turning the cache off stops reading and writing it. What is stored stays until it is cleared.
+
+Known limits:
+
+- An answer cut off at the provider's output limit is stored as if it were whole, because the adapters do not report that it was cut off.
+- An answer that is complete but poor stays: the same request gets it again until the cache is cleared.
+- A cached page still fills in at the request rate of the settings, since a request is given its permit before the cache is asked.
 
 ### Provider adapters
 

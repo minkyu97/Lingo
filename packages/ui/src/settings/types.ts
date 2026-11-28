@@ -40,6 +40,7 @@ export interface SettingsPanelProps {
   onEngineSave: (engine: Engine, key: string) => void;
   onEngineRemove: (engineId: string) => void;
   onOpenShortcuts: () => void;
+  cache: CacheStore;
   /** Leave out where the panel cannot be closed, such as a page of its own. */
   onClose?: () => void;
   /**
@@ -47,6 +48,26 @@ export interface SettingsPanelProps {
    * on its own, with no page behind it to translate.
    */
   page?: PageSwitch;
+}
+
+/** What the cache holds. */
+export interface CacheUsage {
+  /** How many answers are stored. */
+  entries: number;
+  /** How much room they take, in bytes. */
+  bytes: number;
+  /** How much room the cache may take, in bytes. */
+  maxBytes: number;
+}
+
+/** The stored answers, as the settings show and change them. */
+export interface CacheStore {
+  /** Left out until it is known. */
+  usage?: CacheUsage;
+  /** Asks for `usage` to be worked out again. */
+  onRefresh: () => void;
+  /** Removes every stored answer. */
+  onClear: () => void;
 }
 
 /** Whether the page in front is being translated, and how to change that. */

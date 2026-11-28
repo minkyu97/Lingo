@@ -58,7 +58,7 @@
   white-space: nowrap;
 }
 
-.lingo-text-button:hover {
+.lingo-text-button:hover:not(:disabled) {
   background: var(--lingo-subtle);
   color: var(--lingo-fg);
 }

@@ -243,6 +243,12 @@
   padding-bottom: var(--lingo-space-16);
 }
 
+/* A text button on its own, its label in line with the text above it. */
+.lingo-settings__field--quiet-action {
+  padding-left: var(--lingo-space-12);
+  padding-bottom: var(--lingo-space-16);
+}
+
 /* Action row: a row that ends in a button. */
 
 .lingo-action-row {
