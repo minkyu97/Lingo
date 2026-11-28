@@ -366,7 +366,9 @@ test("translates what the page adds and rewrites", async ({
 });
 
 test("puts the page back exactly as it was", async ({ context, worker }) => {
-  await configure(worker);
+  // Without stored answers, so that only the page's own memory can spare
+  // the requests when translation is turned on again.
+  await configure(worker, { settings: { cacheResponses: false } });
   const page = await openLongPage(context, worker);
   const original = await page.evaluate(() => document.body.innerHTML);
   await page.evaluate(() => {
@@ -553,4 +555,34 @@ test("uses the engine chosen for pages, and the request rate from the settings",
   await expect(page.locator("h1")).toHaveText("LONG PAGE");
   const [sent] = await recordedRequests(page);
   expect(sent?.body.model).toBe("claude-sonnet-5-5");
+});
+
+test("translates a page it has translated before without asking again", async ({
+  context,
+  worker,
+}) => {
+  await configure(worker);
+  const page = await openLongPage(context, worker);
+  await toggleTranslation(worker);
+  await expectSettled(page);
+  await page.evaluate(() => window.scrollTo(0, 1500));
+  await expect(page.locator("#p12")).toHaveText(/^PARAGRAPH 12/);
+  await expectSettled(page);
+  const first = (await recordedRequests(page)).length;
+  expect(first).toBeGreaterThan(1);
+
+  // Loaded anew, what the page remembered is gone. The stored answers are not.
+  // A reload keeps the scroll position, so go back to where the first visit
+  // started: the requests are made of what is near the viewport.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.reload();
+  await waitUntilListening(page, worker);
+  await toggleTranslation(worker);
+  await expect(page.locator("h1")).toHaveText("LONG PAGE");
+  await expectSettled(page);
+  await page.evaluate(() => window.scrollTo(0, 1500));
+  await expect(page.locator("#p12")).toHaveText(/^PARAGRAPH 12/);
+  await expectSettled(page);
+
+  expect(await recordedRequests(page)).toHaveLength(first);
 });

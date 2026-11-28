@@ -54,6 +54,7 @@ describe("normalizeSettings", () => {
       contextAwareness: false,
       maxContextChars: 500,
       pageRequestsPerSecond: 5,
+      cacheResponses: false,
     };
     expect(normalizeSettings(stored, "ko")).toEqual(stored);
   });

@@ -17,6 +17,7 @@ import {
 } from "../src/page-translation/protocol.ts";
 import { createRateLimiter } from "../src/page-translation/rate-limiter.ts";
 import { createPageSwitch } from "../src/page-translation/switch.ts";
+import { createResponseCache } from "../src/response-cache.ts";
 import { createSettingsDrawer } from "../src/settings-drawer.ts";
 import {
   loadEngineKey,
@@ -31,6 +32,9 @@ import {
  */
 const E2E_BASE_URL: string | undefined = import.meta.env.WXT_E2E_LLM_BASE_URL;
 
+/** How much of the storage is kept free of cached answers, in bytes. */
+const CACHE_RESERVE_BYTES = 1024 * 1024;
+
 /** Where the build puts the script of `entrypoints/content`. */
 const CONTENT_SCRIPT = "/content-scripts/content.js";
 
@@ -43,6 +47,13 @@ function baseURL(provider: ProviderId): string | undefined {
 export default defineBackground(() => {
   void restrictStorageToTrustedContexts();
 
+  // Answers are kept in the same storage as the settings, which is closed
+  // to content scripts. Some of its room is left for everything else.
+  const cache = createResponseCache({
+    area: browser.storage.local,
+    maxBytes: browser.storage.local.QUOTA_BYTES - CACHE_RESERVE_BYTES,
+  });
+
   // API keys are used and provider calls are made here only, never in a
   // content script.
   browser.runtime.onConnect.addListener((port) => {
@@ -52,6 +63,7 @@ export default defineBackground(() => {
       loadEngineKey,
       createProvider,
       baseURL,
+      cache,
     });
   });
 
@@ -66,6 +78,7 @@ export default defineBackground(() => {
       createProvider,
       limiter,
       baseURL,
+      cache,
     });
   });
 

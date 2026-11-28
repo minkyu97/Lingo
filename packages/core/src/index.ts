@@ -1,4 +1,10 @@
 export {
+  type CacheIdentity,
+  cacheKey,
+  type ResponseCache,
+  withCache,
+} from "./cache.ts";
+export {
   type CapturedContext,
   type ContextLevel,
   clampContext,

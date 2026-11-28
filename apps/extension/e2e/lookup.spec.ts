@@ -288,3 +288,29 @@ test("looks up the selection when the shortcut message arrives", async ({
 
   await expectFinishedEntry(page);
 });
+
+test("asks the provider once for the same lookup", async ({
+  context,
+  extensionId,
+}) => {
+  await setUp(context, extensionId, { apiKey: "test-key" });
+  const page = await openPageAndSelect(context, "bank");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+  expect(await recordedRequests(page)).toHaveLength(1);
+
+  // The same word again, also in a page that was loaded anew.
+  await page.reload();
+  await page.locator("lingo-ui").waitFor({ state: "attached" });
+  await selectWord(page, "bank");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+  expect(await recordedRequests(page)).toHaveLength(1);
+
+  // Another word is another request.
+  await page.keyboard.press("Escape");
+  await selectWord(page, "boats");
+  await trigger(page).click();
+  await expectFinishedEntry(page);
+  expect(await recordedRequests(page)).toHaveLength(2);
+});
