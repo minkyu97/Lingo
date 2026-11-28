@@ -795,23 +795,75 @@ describe("the context screen", () => {
 });
 
 describe("the request rate screen", () => {
-  it("offers the rates and stores the chosen one", () => {
+  const field = () =>
+    screen.getByRole("textbox", {
+      name: "Requests per second",
+    }) as HTMLInputElement;
+
+  it("offers the rates from 1 to 10 and stores the chosen one", () => {
     const { onSettingsChange } = renderPanel();
     open("Request rate");
 
     expect(title()).toBe("Request rate");
-    const rates = screen
-      .getAllByRole("radio")
-      .map((radio) => radio.closest("label")?.textContent);
-    expect(rates).toEqual(["1", "2", "3Default", "5", "10"]);
-    expect(
-      (screen.getByRole("radio", { name: /^3/ }) as HTMLInputElement).checked,
-    ).toBe(true);
+    expect(radios()).toEqual([
+      "1",
+      "2",
+      "3Default",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "Other…",
+    ]);
+    expect(checked(/^3/)).toBe(true);
 
-    fireEvent.click(screen.getByRole("radio", { name: "10" }));
+    fireEvent.click(screen.getByRole("radio", { name: "7" }));
     expect(onSettingsChange).toHaveBeenCalledWith({
       ...settings,
-      pageRequestsPerSecond: 10,
+      pageRequestsPerSecond: 7,
     });
+  });
+
+  it("takes any other rate that is typed in", () => {
+    const { onSettingsChange } = renderPanel();
+    open("Request rate");
+    fireEvent.click(screen.getByRole("radio", { name: "Other…" }));
+    // Nothing changes before there is a number.
+    expect(onSettingsChange).not.toHaveBeenCalled();
+
+    fireEvent.change(field(), { target: { value: "25" } });
+    expect(onSettingsChange).toHaveBeenLastCalledWith({
+      ...settings,
+      pageRequestsPerSecond: 25,
+    });
+  });
+
+  it("does not store what is not a rate, and says so", () => {
+    const { onSettingsChange } = renderPanel();
+    open("Request rate");
+    fireEvent.click(screen.getByRole("radio", { name: "Other…" }));
+
+    for (const text of ["0", "101", "2.5", "fast", "-3"]) {
+      fireEvent.change(field(), { target: { value: text } });
+      expect(screen.getByRole("alert").textContent).toContain(
+        "Enter a whole number from 1 to 100.",
+      );
+      expect(field().getAttribute("aria-invalid")).toBe("true");
+    }
+    expect(onSettingsChange).not.toHaveBeenCalled();
+
+    fireEvent.change(field(), { target: { value: "" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows a stored rate that is not on the list under Other", () => {
+    renderPanel({ settings: { ...settings, pageRequestsPerSecond: 40 } });
+    expect(row("Request rate")).toContain("40 per second");
+    open("Request rate");
+    expect(checked("Other…")).toBe(true);
+    expect(field().value).toBe("40");
   });
 });

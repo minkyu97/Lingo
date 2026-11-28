@@ -33,9 +33,12 @@ export const MAX_CONTEXT_CHARS_LIMIT = 4000;
 export const CONTEXT_CHAR_PRESETS: readonly number[] = [500, 1000, 2000, 4000];
 
 /** The request rates offered in settings, in requests per second. */
-export const PAGE_REQUEST_RATE_PRESETS: readonly number[] = [1, 2, 3, 5, 10];
+export const PAGE_REQUEST_RATE_PRESETS: readonly number[] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+];
 
-const MAX_PAGE_REQUESTS_PER_SECOND = 10;
+/** The highest request rate that can be set, by typing it in. */
+export const MAX_PAGE_REQUESTS_PER_SECOND = 100;
 
 /** Languages offered as translation targets, as BCP 47 tags. */
 export const TARGET_LANGUAGES: readonly string[] = [

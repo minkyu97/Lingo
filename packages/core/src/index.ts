@@ -70,6 +70,7 @@ export {
   defaultSettings,
   languageName,
   MAX_CONTEXT_CHARS_LIMIT,
+  MAX_PAGE_REQUESTS_PER_SECOND,
   nativeLanguageName,
   normalizeSettings,
   PAGE_REQUEST_RATE_PRESETS,

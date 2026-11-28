@@ -540,9 +540,13 @@ test("uses the engine chosen for pages, and the request rate from the settings",
   await panel.getByRole("button", { name: "Back" }).click();
 
   await row(/^Request rate/).click();
-  await panel.getByRole("radio", { name: "5", exact: true }).check();
+  await panel.getByRole("radio", { name: "7", exact: true }).check();
+  // Any other rate can be typed in.
+  await panel.getByRole("radio", { name: "Other…" }).check();
+  await panel.getByRole("textbox", { name: "Requests per second" }).fill("25");
+  await page.screenshot({ path: testInfo.outputPath("request-rate.png") });
   await panel.getByRole("button", { name: "Back" }).click();
-  await expect(row(/^Request rate/)).toContainText("5 per second");
+  await expect(row(/^Request rate/)).toContainText("25 per second");
 
   // The page is translated by the engine chosen for pages.
   await panel.getByRole("button", { name: "Translate", exact: true }).click();

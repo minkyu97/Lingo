@@ -105,7 +105,8 @@ describe("normalizeSettings", () => {
     expect(rate(1)).toBe(1);
     expect(rate(0)).toBe(1);
     expect(rate(2.4)).toBe(2);
-    expect(rate(500)).toBe(10);
+    expect(rate(25)).toBe(25);
+    expect(rate(500)).toBe(100);
     expect(rate("fast")).toBe(3);
     // Every rate offered in settings is one that is kept as it is.
     for (const preset of PAGE_REQUEST_RATE_PRESETS) {
